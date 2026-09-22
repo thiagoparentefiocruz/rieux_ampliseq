@@ -1,0 +1,40 @@
+#	Parametros de execucao por regiao.
+#
+#	trunclenf/trunclenr: DEFINIDOS POR COMPRIMENTO MEDIDO, nao por coordenadas
+#	canonicas em E. coli. A versao anterior usava o inserto de E. coli e mirava
+#	50 pb de sobreposicao, o que deixava apenas 38 pb de tolerancia acima do
+#	inserto assumido — pouco demais para a variacao natural entre taxons.
+#
+#	V1V2  161/160 -> 230/230.
+#	      O teto antigo (161+160-12 = 309) ficava ABAIXO da mediana real da
+#	      comunidade (324, medido na Renata). Fusao mediana de 1,7%: ~98% da
+#	      comunidade era descartada em silencio, sem nenhum erro no log.
+#	      Com 230/230 (teto 448): fusao 93,1% (IQR 92,1-93,5). A distribuicao
+#	      fecha sozinha — p99=351, p99,5=359, max=397 — folga medida, nao
+#	      suposta. Sem custo de qualidade.
+#
+#	V2V3  MANTIDO em 213/212, deliberadamente.
+#	      Testado 248/248 no Fabio: a cauda acima do teto atual (413) e ~1% dos
+#	      ASVs, e recupera-la custou 6,6 pontos de fusao (88,6 -> 82,0) e 26%
+#	      dos ASVs, perdidos por erro esperado no fim da read. Troca ruim.
+#
+#	V3V4, V4V5, V5V7, V7V9: a distribuicao fecha bem abaixo do teto em todos os
+#	      colaboradores (maior ASV 375-460 contra tetos de 386-463). Nada a fazer.
+#
+#	A fusao baixa do V4V5 da Patricia (19,4%) NAO e comprimento — testada com
+#	230/230, deu 19,3%. E o material dela. Limitacao declarada, nao defeito.
+#
+#	Valor 0 significa "nao truncar" — usado no ITS, cujo comprimento varia
+#	demais entre taxons para um corte fixo. Medido: maior ITS1 observado 358 pb
+#	contra limite de fusao de ~518, entao nada se perdeu por comprimento.
+#
+#	banco: silva (16S) ou unite (ITS).
+#
+regiao	trunclenf	trunclenr	banco	extra
+V1V2	230	230	silva
+V2V3	213	212	silva
+V3V4	238	237	silva
+V4V5	211	210	silva
+V5V7	199	199	silva
+V7V9	201	201	silva
+ITS1	0	0	unite	--illumina_pe_its --cut_its its1

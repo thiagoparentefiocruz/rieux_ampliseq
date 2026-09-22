@@ -1,0 +1,24 @@
+#	Primers do QIAseq 16S/ITS Pro Screening Panel, recuperados dos dados.
+#	Derivados de duas execucoes independentes do discover_primers.py:
+#	  - 4 Smart Controls (construto sintetico, cobre todas as regioes)
+#	  - 24 amostras reais
+#	O primer e o nucleo COMUM as duas: como o molde a jusante difere entre
+#	construto sintetico e bacteria real, o ponto em que os dois consensos
+#	divergem marca onde o primer acaba. Os comprimentos resultantes (15-22)
+#	batem com os primers canonicos da literatura, coluna `canonico`.
+#
+#	V7V9: os dois consensos comecam em posicoes diferentes, entao aqui o
+#	nucleo e a maior substring comum, nao o prefixo. Primer mais curto ->
+#	mais permissivo para rotear, e a validacao empirica decide.
+#
+#	ITS1 so aparece nos controles. Nas 24 amostras reais nao ha sinal de
+#	ITS: o ramo fungico nao amplificou.
+#
+regiao	forward	reverse	canonico_F	canonico_R	phased	fonte
+V1V2	AGRGTTTGATYMTGGCTCAG	CTGCTGCCTYCCGTAGGAGT	27F	338R	sim	ambos
+V2V3	GGCGNACGGGTGAGTAA	WTTACCGCGGCTGCTGGCAC	~104F	519R	sim	ambos
+V3V4	CCTACGGGNGGCWGCAG	GACTACHVGGGTATCTAATCCK	341F	806R	nao	ambos
+V4V5	GTGYCAGCMGCCGCGGTAAT	CCGYCAATTYMTTTRAGTTT	515F	926R	sim	ambos
+V5V7	GGATTAGATACCCBRGTAGTCM	ACGTCRTCCCCDCCTTCCTC	805F	1193R	sim	ambos
+V7V9	YAACGAGCGMRACCC	TACGGYTACCTTGTTAYGACTT	~1100F	1492R	sim	ambos
+ITS1	CTTGGTCATTTAGAGGAAGTAA	GCTGCGTTCTTCATCGATGCTA	ITS1F	ITS2	sim	so controles
