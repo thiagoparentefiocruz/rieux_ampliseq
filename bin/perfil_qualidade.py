@@ -108,6 +108,8 @@ def main():
                     help="sobreposicao que se pretende obter. Medido no piloto: "
                          "50 funde melhor que 89. Nao truncar no maximo.")
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--out", default=None,
+                    help="grava os truncLen escolhidos como parametros_regioes.tsv")
     args = ap.parse_args()
 
     random.seed(args.seed)
@@ -214,6 +216,27 @@ def main():
     for reg, cF, cR in linhas_cfg:
         print("  %-7s --trunclenf %d --trunclenr %d" % (reg, cF, cR))
     print("\n  (ITS1: usar --illumina_pe_its --cut_its its1, sem trunclen)")
+
+    # Escrever o TSV, e nao so imprimir, e o que permite este passo ser um
+    # ESTAGIO do wrapper em vez de uma consulta que alguem transcreve na mao.
+    # Transcrever a mao foi exatamente como o truncLen do V1V2 entrou errado.
+    if args.out:
+        pasta = os.path.dirname(os.path.abspath(args.out))
+        if pasta:
+            os.makedirs(pasta, exist_ok=True)
+        with open(args.out, "w") as fh:
+            fh.write("# Gerado por perfil_qualidade.py a partir das reads desta\n"
+                     "# corrida. truncLen depende de comprimento e qualidade da\n"
+                     "# corrida: NAO reaproveite esta tabela em outra.\n")
+            fh.write("regiao\ttrunclenf\ttrunclenr\tbanco\textra\n")
+            for reg, cF, cR in linhas_cfg:
+                if reg.upper().startswith("ITS"):
+                    # ITS nao tem comprimento fixo: truncar corta ASV legitimo.
+                    fh.write("%s\t0\t0\tunite\t--illumina_pe_its --cut_its its1\n"
+                             % reg)
+                else:
+                    fh.write("%s\t%d\t%d\tsilva\t\n" % (reg, cF, cR))
+        print("\nGravado %s" % args.out)
 
 
 if __name__ == "__main__":

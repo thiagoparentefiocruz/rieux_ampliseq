@@ -54,24 +54,81 @@ sources `bin/ambiente.sh` on its own if the reference-database variables are not
 already in the environment, and `ambiente.sh` refuses to run rather than guess
 that directory.
 
+## Stages
+
+The run is a chain of stages, each of which can be run alone, and the chain can
+be entered or left at any point:
+
+```
+organizar -> descobrir -> dividir -> perfilar -> rodar -> sidle -> consolidar
+```
+
+| stage | what it does |
+|---|---|
+| `organizar` | cross a sample sheet with the FASTQs on disk, one project per group |
+| `descobrir` | recover the panel's primers from the reads themselves |
+| `dividir` | route each read pair to its region, then write one samplesheet per region |
+| `perfilar` | measure per-cycle quality and pick truncLenF/R per region |
+| `rodar` | run ampliseq once per region |
+| `sidle` | run the multi-region reconstruction |
+| `consolidar` | write `final_reports/` |
+
+`perfilar` comes **after** `dividir`, not before: truncation is chosen per
+region, so it needs the reads already routed.
+
+From scratch, one command:
+
+```bash
+screen -S renata
+rieux_ampliseq.sh --projeto renata --brutos brutos/renata
+# Ctrl-A then D
+```
+
+Re-entering in the middle, when what came before already exists:
+
+```bash
+rieux_ampliseq.sh --projeto renata --from rodar
+rieux_ampliseq.sh --projeto renata --stage consolidar
+```
+
+`organizar` is skipped by default and is the only one-to-many stage: one sample
+sheet becomes several projects, so it does not chain — it writes the projects
+and prints the next command for each.
+
+### The project directory
+
+Stages do not talk to each other through flags. They talk through a directory
+with a known layout, and that is what makes re-entry possible without
+re-stating everything that came before:
+
+```
+<projeto>/
+  brutos/                  FASTQs (symlinks), from `organizar`
+  metadata.tsv             sample -> group, from `organizar`
+  primers.tsv              from `descobrir`, or copied from --primers
+  parametros_regioes.tsv   truncLen per region, from `perfilar`
+  split/samplesheets/      from `dividir`
+  <REGION>/                one ampliseq run, from `rodar`
+  sidle/                   from `sidle`
+  final_reports/           from `consolidar`
+  logs/
+```
+
+Any of those paths can be overridden by a flag. The layout is the default, not
+a requirement. A stage whose input is missing says which stage produces it.
+
 ## Invocation
 
 The Nextflow driver runs on the **login node**, inside a `screen`. It sits idle
 waiting on SLURM and submits the tasks; it needs no allocation of its own.
-
-```bash
-screen -S fabio
-rieux_ampliseq.sh --name fabio --input split/samplesheets/fabio
-# Ctrl-A then D
-```
 
 Regions run **in sequence**, on purpose: two regions of the same dataset would
 only compete for the same queue. Two **datasets** in parallel is a different
 matter — different partitions, and there the gain is real:
 
 ```bash
-rieux_ampliseq.sh --name fabio    --input .../fabio                        # cpu
-rieux_ampliseq.sh --name patricia --input .../patricia \
+rieux_ampliseq.sh --projeto fabio    --from rodar                          # cpu
+rieux_ampliseq.sh --projeto patricia --from rodar \
                   --partition fat --work-dir exec/patricia
 ```
 
@@ -86,9 +143,13 @@ re-running after a failure picks up where it stopped.
 
 | flag | meaning |
 |---|---|
-| `--name NAME` | label for the dataset; goes into output paths and logs |
-| `--input DIR` | directory holding one `samplesheet_<REGION>.tsv` per region |
-| `--outdir DIR` | output root (default `./resultados/<NAME>`) |
+| `--projeto NAME` | label for the project; also its working directory |
+| `--outdir DIR` | project root (default `./<projeto>`) |
+| `--stage/--from/--until/--skip` | which stages to run |
+| `--brutos DIR` | raw FASTQs (default `<projeto>/brutos`) |
+| `--primers FILE` | skip `descobrir` — you already know your panel's primers |
+| `--params FILE` | skip `perfilar` — you already chose truncLen |
+| `--controles REGEX` | which sample names are controls (default `^[Ss]mart`) |
 | `--partition NAME` | SLURM partition (default `cpu`) |
 | `--regions "A B"` | only these regions |
 | `--work-dir DIR` | Nextflow launch directory |
@@ -169,7 +230,9 @@ fat partition — with SILVA they are the only genuinely memory-hungry step.
 | script | what it does |
 |---|---|
 | `ambiente.sh` | environment for the Nextflow driver |
-| `split_regioes.sh` | routes raw reads into per-region samplesheets |
+| `split_regioes.sh` | routes raw reads into per-region files (SLURM array) |
+| `resumo_split.py` | split metrics + one samplesheet per region |
+| `organizar_projeto.py` | sample sheet + FASTQs on disk -> one project per group |
 | `discover_primers.py` | recovers the panel's primers from the FASTQs |
 | `validar_regioes_sidle.py` | in-silico PCR; writes `regions_multiregion.tsv` |
 | `fazer_samplesheet.py` | builds the undivided-reads samplesheet for the Sidle branch |
