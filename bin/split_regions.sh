@@ -73,7 +73,9 @@ elif [[ -n "$IMG" ]]; then
         [[ -e "$alvo" ]] || continue
         real=$(readlink -f "$alvo")
         raiz="/$(echo "${real#/}" | cut -d/ -f1)"
-        [[ -d "$raiz" ]] && RAIZES["$raiz"]=1
+        # mesmo motivo do if/else abaixo: com set -e, um `&&` com condicao
+        # falsa no fim da linha derruba o script
+        if [[ -d "$raiz" ]]; then RAIZES["$raiz"]=1; fi
     done
     BINDS=()
     for r in "${!RAIZES[@]}"; do BINDS+=(-B "$r"); done
@@ -152,8 +154,17 @@ for (( k = INICIO; k <= FIM; k++ )); do
     R1="${R1S[$k]}"
     # tenta primeiro a forma sem sufixo (<amostra>_R1.fastq.gz); se nao casar,
     # cai na forma do BaseSpace (..._R1_001.fastq.gz)
+    # if/else, NAO `[[ cond ]] && cmd`.
+    #
+    # Este arquivo roda com `set -e`. Num `[[ cond ]] && cmd` que e a ultima
+    # coisa da linha, condicao falsa faz a linha inteira retornar 1 — e o
+    # `set -e` mata o script. E o caso NORMAL aqui: quando a primeira
+    # substituicao funciona, o teste e falso. O script morria em toda amostra
+    # com nome no padrao do organize.
     R2="${R1/%_R1.fastq.gz/_R2.fastq.gz}"
-    [[ "$R2" == "$R1" ]] && R2="${R1/_R1_/_R2_}"
+    if [[ "$R2" == "$R1" ]]; then
+        R2="${R1/_R1_/_R2_}"          # padrao do BaseSpace
+    fi
     AMOSTRA=$(basename "$R1" .fastq.gz)
     AMOSTRA=$(printf '%s' "$AMOSTRA" | sed -E 's/(_S[0-9]+)?(_L[0-9]+)?_R1(_[0-9]+)?$//')
     JSON="$SAIDA/relatorios/${AMOSTRA}.cutadapt.json"
