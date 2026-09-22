@@ -48,7 +48,8 @@ import shutil
 import sys
 import tarfile
 
-PADRAO = "/home/thiago.parente/data.thiago.parente/pipeline/bancos.env"
+# sem caminho de ninguem cravado: vem do RIEUX_PIPELINE_BASE, igual ao ambiente.sh
+PADRAO = os.path.join(os.environ.get("RIEUX_PIPELINE_BASE", "."), "bancos.env")
 
 
 def ler_env(caminho):
@@ -278,7 +279,7 @@ def main():
         if chave.startswith("DB_"):
             print("  %-20s %s" % (chave, valor))
     print("\nRecarregue o ambiente antes de rodar o ITS1:")
-    print("  source ~/proj.thiago.parente/scripts_modelos/ambiente.sh")
+    print("  source <repo>/bin/ambiente.sh")
 
 
 if __name__ == "__main__":

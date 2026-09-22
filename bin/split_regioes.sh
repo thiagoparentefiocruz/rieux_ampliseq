@@ -53,7 +53,7 @@ SAIDA="${3:-split_saida}"
 THREADS="${SLURM_CPUS_PER_TASK:-4}"
 IDX="${SLURM_ARRAY_TASK_ID:-1}"
 
-CACHE=/home/thiago.parente/data.thiago.parente/pipeline/singularity
+CACHE="${NXF_SINGULARITY_CACHEDIR:-${RIEUX_PIPELINE_BASE:-$HOME}/singularity}"
 
 # ---------------------------------------------------------------- cutadapt
 # O cluster nao tem cutadapt instalado, mas o cache do ampliseq tem a imagem.

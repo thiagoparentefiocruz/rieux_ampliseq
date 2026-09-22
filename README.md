@@ -7,8 +7,25 @@ cluster, optionally runs the multi-region reconstruction with
 single `final_reports/` directory.
 
 Built for the **QIAseq 16S/ITS Pro Screening Panel (96)** — six 16S regions
-(V1V2, V2V3, V3V4, V4V5, V5V7, V7V9) plus ITS1 — but nothing in it is specific
-to that kit beyond the two tables in `assets/`.
+(V1V2, V2V3, V3V4, V4V5, V5V7, V7V9) plus ITS1.
+
+What is panel-specific and what is not:
+
+- The **primers** in `assets/primers_painel.tsv` are that kit's, recovered from
+  sequencing data with `bin/discover_primers.py` (QIAGEN does not publish them).
+  Another panel supplies its own table — or runs that script on its own reads.
+- The **truncation lengths** in `assets/parametros_regioes.tsv` were derived
+  from one specific run. They depend on read length and quality, so they are a
+  starting point, not a setting: re-derive them for your run with
+  `bin/perfil_qualidade.py`. Getting this wrong is expensive — an earlier
+  version of that table capped V1V2 below the real community median and
+  silently destroyed 98% of its merges.
+- The **control name** defaults to the kit's Smart Control (`^[Ss]mart`) and is
+  a flag everywhere (`--controles`), because what counts as a control belongs to
+  the experiment, not to the tool.
+- The **region names** come from the primers table, not from a naming
+  convention. A panel whose regions are called `region1..region5` — the example
+  in ampliseq's own docs — works unchanged.
 
 `final_reports/` is the contract with the companion R package
 [`aspp`](https://github.com/thiagoparentefiocruz/aspp), which reads those TSVs
@@ -25,8 +42,17 @@ echo 'export PATH="$HOME/rieux_ampliseq:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-The wrapper sources `bin/ambiente.sh` on its own if the reference-database
-variables are not already in the environment.
+Then tell it, once, where your installation lives — containers, `NXF_HOME` and
+the reference databases:
+
+```bash
+echo 'RIEUX_PIPELINE_BASE=/path/to/your/pipeline' > ~/.rieux_ampliseq.conf
+```
+
+No path in this repository is tied to any particular account. The wrapper
+sources `bin/ambiente.sh` on its own if the reference-database variables are not
+already in the environment, and `ambiente.sh` refuses to run rather than guess
+that directory.
 
 ## Invocation
 

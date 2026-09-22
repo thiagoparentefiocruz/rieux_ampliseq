@@ -15,7 +15,24 @@
 # As TAREFAS e que rodam nos nos de computacao, e essas sim nao tem
 # internet: por isso os containers e os bancos foram pre-baixados.
 
-BASE=/home/thiago.parente/data.thiago.parente/pipeline
+# Raiz da instalacao: containers, NXF_HOME e bancos de referencia. Ela e
+# especifica de cada usuario, entao NAO pode estar cravada aqui. Defina uma vez:
+#
+#     echo 'RIEUX_PIPELINE_BASE=/caminho/para/pipeline' > ~/.rieux_ampliseq.conf
+#
+# ou exporte RIEUX_PIPELINE_BASE no seu ~/.bashrc.
+if [[ -z "${RIEUX_PIPELINE_BASE:-}" && -r "$HOME/.rieux_ampliseq.conf" ]]; then
+    # shellcheck disable=SC1090
+    source "$HOME/.rieux_ampliseq.conf"
+fi
+BASE="${RIEUX_PIPELINE_BASE:-}"
+if [[ -z "$BASE" || ! -d "$BASE" ]]; then
+    echo "ERRO: RIEUX_PIPELINE_BASE nao definida (ou aponta para nada)." >&2
+    echo "      Crie ~/.rieux_ampliseq.conf com uma linha:" >&2
+    echo "        RIEUX_PIPELINE_BASE=/caminho/para/pipeline" >&2
+    echo "      Esse diretorio guarda nextflow_home/, singularity/ e bancos.env." >&2
+    return 1 2>/dev/null || exit 1
+fi
 
 export NXF_HOME="$BASE/nextflow_home"
 export NXF_SINGULARITY_CACHEDIR="$BASE/singularity"

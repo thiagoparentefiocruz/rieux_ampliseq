@@ -64,8 +64,15 @@ RANKS_DETALHE = ["Family", "Genus", "Species"]
 
 # ------------------------------------------------------------------ leitura
 
+# O padrao e o Smart Control do painel QIAseq, mas o nome do controle e do
+# EXPERIMENTO, nao da ferramenta: quem usa branco de extracao chamado "NTC" ou
+# "blank" precisa que isto seja parametro. Trocado por --controles.
+PADRAO_CONTROLE = r"^[Ss]mart"
+_rx_controle = re.compile(PADRAO_CONTROLE)
+
+
 def eh_controle(nome):
-    return nome.lower().startswith("smart")
+    return bool(_rx_controle.search(nome))
 
 
 def ler_tsv(caminho):
@@ -299,15 +306,38 @@ def taxonomia(dir_regiao, nome, regiao, s_cls, s_abd, s_amo, s_prev,
 # execucoes de diagnostico que ficaram guardadas ao lado — uteis para comparar
 # antes/depois, mas final_reports/ e o contrato com o `aspp`, e ali elas
 # entrariam como se fossem regioes do painel. Entram so com --com-variantes.
+# Fallback quando nao se informa a tabela de primers: nomes no estilo V3V4/ITS1.
+# So fallback mesmo — a lista AUTORITATIVA de regioes e a do --primers, porque
+# quem define as regioes e o painel, nao uma convencao de nome. Um painel com
+# regioes chamadas "R1".."R5" (que e o exemplo da propria documentacao do
+# ampliseq) passaria batido por qualquer regex nossa.
 CANONICA = re.compile(r"^(V\d+V\d+|ITS\d*)$")
 
 
-def regioes_em(dirbase, variantes=False):
+def nomes_do_painel(caminho):
+    """Le a primeira coluna da tabela de primers. None se nao houver tabela."""
+    if not caminho or not os.path.isfile(caminho):
+        return None
+    nomes = set()
+    with open(caminho) as fh:
+        for linha in fh:
+            if linha.startswith("#") or not linha.strip():
+                continue
+            c = linha.split("\t")
+            if c[0] == "regiao" or c[0] == "region":
+                continue
+            nomes.add(c[0].strip())
+    return nomes or None
+
+
+def regioes_em(dirbase, variantes=False, painel=None):
     todas = sorted(d for d in os.listdir(dirbase)
                    if os.path.isdir(os.path.join(dirbase, d))
                    and d not in NAO_REGIAO and not d.startswith("."))
     if variantes:
         return todas
+    if painel:
+        return [d for d in todas if d in painel]
     return [d for d in todas if CANONICA.match(d)]
 
 
@@ -319,6 +349,12 @@ def main():
                     help="alternativa: <raiz>/resultados/<nome>/<REGIAO>/")
     ap.add_argument("--out", default=None, help="diretorio de saida")
     ap.add_argument("--regioes", nargs="*", default=None)
+    ap.add_argument("--primers", default=None,
+                    help="tabela de primers; a primeira coluna e a lista "
+                         "autoritativa de regioes do painel")
+    ap.add_argument("--controles", default=PADRAO_CONTROLE,
+                    help="regex dos nomes de amostra que sao controle "
+                         "(padrao: %(default)s)")
     ap.add_argument("--com-variantes", action="store_true",
                     help="inclui execucoes de diagnostico (V1V2_t160_ruim etc.)")
     ap.add_argument("--min-reads", type=int, default=1)
@@ -346,12 +382,16 @@ def main():
     out = args.out or saida_padrao
     rx = re.compile(args.foco, re.I) if args.foco else None
 
+    global _rx_controle
+    _rx_controle = re.compile(args.controles)
+    painel = nomes_do_painel(args.primers)
+
     s_ret, s_cls, s_abd, s_len, s_amo, s_prev = [], [], [], [], [], []
     focos = []
 
     for nome, dirbase in conjuntos:
-        regs = args.regioes if args.regioes else regioes_em(dirbase,
-                                                            args.com_variantes)
+        regs = args.regioes if args.regioes else regioes_em(
+            dirbase, args.com_variantes, painel)
         for regiao in regs:
             d = os.path.join(dirbase, regiao)
             if not os.path.isdir(d):

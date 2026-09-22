@@ -65,7 +65,10 @@ PARTICAO="cpu"
 CONFIG="$AQUI/conf/rieux.config"
 PRIMERS="$AQUI/assets/primers_painel.tsv"
 PARAMS="$AQUI/assets/parametros_regioes.tsv"
-PIPE="${AMPLISEQ_HOME:-$HOME/data.thiago.parente/pipeline/ampliseq/2_15_0}"
+# Padrao e o nome no nf-core: o Nextflow baixa e versiona sozinho. Um caminho
+# local so e necessario em cluster sem internet nos nos — e ai o usuario passa
+# --pipeline. Cravar aqui o caminho de alguem quebra para todo mundo mais.
+PIPE="${AMPLISEQ_HOME:-nf-core/ampliseq}"
 DIR_EXEC="$PWD"
 MIN_AMOSTRAS=3
 MULTIREGION=""
@@ -189,7 +192,10 @@ for f in "$PRIMERS" "$PARAMS" "$CONFIG"; do
     [[ -r "$f" ]] || { echo "ERRO: nao achei $f" >&2; exit 1; }
 done
 [[ -d "$ENTRADA" ]] || { echo "ERRO: --input nao e um diretorio: $ENTRADA" >&2; exit 1; }
-[[ -d "$PIPE" ]] || { echo "ERRO: nao achei o ampliseq em $PIPE (use --pipeline)" >&2; exit 1; }
+# so checamos existencia quando for caminho; nome de pipeline o Nextflow resolve
+if [[ "$PIPE" == /* || "$PIPE" == ./* ]]; then
+    [[ -d "$PIPE" ]] || { echo "ERRO: nao achei o ampliseq em $PIPE (use --pipeline)" >&2; exit 1; }
+fi
 command -v nextflow >/dev/null 2>&1 || {
     echo "ERRO: nextflow fora do PATH — rode 'source $AQUI/bin/ambiente.sh'" >&2; exit 1; }
 [[ -n "${DB_SILVA_GENERO:-}" ]] || {

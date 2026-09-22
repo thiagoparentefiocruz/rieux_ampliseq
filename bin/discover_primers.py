@@ -27,7 +27,7 @@ Saida: tabela no stdout + primers.fasta + primers.tsv
 Uso
 ---
   python3 discover_primers.py \
-      --dir /home/thiago.parente/data.thiago.parente/2026_tematicos/dados_brutos \
+      --dir /caminho/para/os/fastq \
       --samples 24 --reads 50000 --out ./primers_descobertos
 
 Nao requer internet nem bibliotecas externas (apenas Python 3.7+).
