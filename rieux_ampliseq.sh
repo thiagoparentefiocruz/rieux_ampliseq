@@ -208,7 +208,12 @@ done
 [[ -n "$RAIZ" ]] || RAIZ="$PWD/$PROJETO"
 [[ "$RAIZ" == /* ]] || RAIZ="$PWD/$RAIZ"
 
-[[ -n "$BRUTOS" ]]  || BRUTOS="$RAIZ/brutos"
+# guardados antes de receberem o padrao do layout: so o que o usuario digitou
+# pode ser cobrado como erro de digitacao.
+PRIMERS_DADO="$PRIMERS"
+PARAMS_DADO="$PARAMS"
+
+[[ -n "$BRUTOS" ]]  || BRUTOS="$RAIZ/raw"
 [[ -n "$PRIMERS" ]] || PRIMERS="$RAIZ/primers.tsv"
 [[ -n "$PARAMS" ]]  || PARAMS="$RAIZ/region_params.tsv"
 SPLIT="$RAIZ/split"
@@ -220,6 +225,34 @@ for v in BRUTOS PRIMERS PARAMS PLANILHA CONFIG DIR_EXEC MULTIREGION; do
     val="${!v}"
     [[ -z "$val" || "$val" == /* ]] || printf -v "$v" '%s' "$PWD/$val"
 done
+
+# ------------------------------------------- caminhos dados pelo usuario
+#
+# Um caminho que o usuario DIGITOU e nao existe e sempre erro — inclusive em
+# --dry-run. Antes, o --dry-run avisava "viria do estagio X", que e a mensagem
+# certa para um arquivo que ainda nao foi gerado e a mensagem errada para um
+# que foi informado com um $VARIAVEL vazio. Foi exatamente isso que aconteceu:
+# um --primers "$REPO/..." com REPO vazio virou "/rieux_ampliseq/...", o
+# wrapper aceitou, e o erro so apareceu tres estagios depois, num awk.
+erros=0
+checar_dado() {   # checar_dado <valor> <flag>
+    [[ -z "$1" ]] && return 0
+    [[ -e "$1" ]] && return 0
+    echo "ERROR: $2: no such file or directory" >&2
+    echo "       $1" >&2
+    case "$1" in
+        /*/*) ;;
+        /*)  echo "       (a leading component looks empty — an unset shell" >&2
+             echo "        variable in the path you typed?)" >&2 ;;
+    esac
+    erros=1
+}
+checar_dado "$PRIMERS_DADO"  --primers
+checar_dado "$PARAMS_DADO"   --params
+checar_dado "$PLANILHA"      --sample-table
+checar_dado "$CONFIG"        --config
+checar_dado "$MULTIREGION"   --multiregion
+(( erros )) && exit 1
 
 # ------------------------------------------------- quais estagios rodar
 # O resultado sai por variavel, nao por stdout, de proposito. Com
@@ -313,7 +346,7 @@ if rodar_estagio organize; then
         for d in "$RAIZ"/projects/*/; do
             [[ -d "$d" ]] || continue
             n=$(basename "$d")
-            echo "    rieux_ampliseq.sh --project $n --outdir $d --raw-dir $d/dados_brutos"
+            echo "    rieux_ampliseq.sh --project $n --outdir $d --from split"
         done
     fi
     echo
@@ -397,7 +430,16 @@ if rodar_estagio run; then
     cd "$DIR_EXEC" || exit 1
 
     if [[ ${#REGIOES[@]} -eq 0 ]]; then
-        mapfile -t REGIOES < <(awk -F'\t' '!/^#/ && !/^regiao\t/ && NF>=4 {print $1}' "$PARAMS")
+        if [[ -r "$PARAMS" ]]; then
+            mapfile -t REGIOES < <(awk -F'\t' \
+                '!/^#/ && !/^region\t/ && !/^regiao\t/ && NF>=4 {print $1}' "$PARAMS")
+        else
+            # so acontece em --dry-run, quando o estagio `profile` ainda nao
+            # gerou a tabela. Deixar o awk falhar aqui imprimia um "fatal" que
+            # parecia defeito do wrapper.
+            echo '    (--dry-run: no region list yet; the profile stage writes it)'
+            REGIOES=()
+        fi
     fi
 
     declare -a OK=() FALHOU=() PULADO=()

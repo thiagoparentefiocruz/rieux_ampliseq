@@ -178,7 +178,7 @@ def main():
     # ---------------------------------------------------------- execucao
     print("\n== Saida =======================================================")
     for dono, itens in sorted(por_dono.items()):
-        destino = os.path.join(args.out_dir, dono, "dados_brutos")
+        destino = os.path.join(args.out_dir, dono, "raw")
         meta = os.path.join(args.out_dir, dono, "metadata.tsv")
         if args.apply:
             os.makedirs(destino, exist_ok=True)
