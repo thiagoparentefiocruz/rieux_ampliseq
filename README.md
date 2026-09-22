@@ -55,6 +55,26 @@ prompt. It then checks the prerequisites and names the ones that are missing.
 Running it twice does not duplicate anything, and `./install.sh --uninstall`
 removes what it added.
 
+### Pin your ampliseq copy
+
+```bash
+./install.sh --mode command --ampliseq ~/pipeline/ampliseq/2_15_0
+```
+
+This is worth doing once and forgetting. Without it the wrapper passes the
+*name* `nf-core/ampliseq` to Nextflow, and Nextflow pulls whatever is on the
+default branch today — which may require a newer Nextflow than your cluster
+module provides. That failure costs a whole run and says nothing about your
+data:
+
+```
+Nextflow version 25.10.2 does not match workflow required version: >=25.10.4
+```
+
+The installer records the path as `AMPLISEQ_HOME` in `~/.rieux_ampliseq.conf`.
+`--pipeline DIR` overrides it for one run, and `--revision 2.15.0` pins the
+version when you do want the remote copy.
+
 No path in this repository is tied to any particular account. The wrapper
 sources `bin/env.sh` on its own if the reference-database variables are not
 already in the environment, and `env.sh` refuses to run rather than guess that

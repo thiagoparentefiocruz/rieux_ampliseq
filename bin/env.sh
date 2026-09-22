@@ -21,17 +21,37 @@
 #     echo 'RIEUX_PIPELINE_BASE=/caminho/para/pipeline' > ~/.rieux_ampliseq.conf
 #
 # ou exporte RIEUX_PIPELINE_BASE no seu ~/.bashrc.
-if [[ -z "${RIEUX_PIPELINE_BASE:-}" && -r "$HOME/.rieux_ampliseq.conf" ]]; then
+#
+# O arquivo e lido SEMPRE que existe, e nao apenas quando RIEUX_PIPELINE_BASE
+# esta vazia. A versao anterior so o lia nesse caso, e o efeito era silencioso e
+# caro: quem ja tinha RIEUX_PIPELINE_BASE exportada no ambiente nunca via uma
+# linha AMPLISEQ_HOME acrescentada depois ao arquivo. Ler sempre e devolver o
+# que veio do ambiente mantem a precedencia certa — ambiente na frente do
+# arquivo — sem perder as linhas novas.
+if [[ -r "$HOME/.rieux_ampliseq.conf" ]]; then
+    _base_do_ambiente="${RIEUX_PIPELINE_BASE:-}"
+    _ampliseq_do_ambiente="${AMPLISEQ_HOME:-}"
     # shellcheck disable=SC1090
     source "$HOME/.rieux_ampliseq.conf"
+    if [[ -n "$_base_do_ambiente" ]]; then
+        RIEUX_PIPELINE_BASE="$_base_do_ambiente"
+    fi
+    if [[ -n "$_ampliseq_do_ambiente" ]]; then
+        AMPLISEQ_HOME="$_ampliseq_do_ambiente"
+    fi
+    unset _base_do_ambiente _ampliseq_do_ambiente
 fi
+
 # AMPLISEQ_HOME, quando definido no mesmo arquivo de configuracao, aponta para
 # uma copia LOCAL do pipeline. Sem ele o wrapper usa o nome remoto
 # 'nf-core/ampliseq', e o Nextflow baixa o que estiver corrente no GitHub — que
 # pode exigir uma versao de Nextflow mais nova que a do cluster. Foi assim que
 # seis regioes falharam de uma vez: master exigindo >=25.10.4 contra o 25.10.2
 # do modulo.
-[[ -n "${AMPLISEQ_HOME:-}" ]] && export AMPLISEQ_HOME
+if [[ -n "${AMPLISEQ_HOME:-}" ]]; then
+    export AMPLISEQ_HOME
+fi
+export RIEUX_PIPELINE_BASE
 
 BASE="${RIEUX_PIPELINE_BASE:-}"
 if [[ -z "$BASE" || ! -d "$BASE" ]]; then

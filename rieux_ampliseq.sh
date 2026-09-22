@@ -98,7 +98,9 @@ PRIMERS=""
 PARAMS=""
 PARTICAO="cpu"
 CONFIG="$AQUI/conf/rieux.config"
-PIPE="${AMPLISEQ_HOME:-nf-core/ampliseq}"
+# Fica vazio de proposito: so e resolvido DEPOIS de carregar o ambiente, porque
+# AMPLISEQ_HOME pode vir do ~/.rieux_ampliseq.conf, que e lido la adiante.
+PIPE=""
 DIR_EXEC="$PWD"
 CONTROLES='^[Ss]mart'
 MIN_AMOSTRAS=3
@@ -143,7 +145,8 @@ Options
   --regions "A B"      only these regions
   --work-dir DIR       Nextflow launch directory (default: current)
   --config FILE        cluster profile
-  --pipeline X         ampliseq name or path (default: nf-core/ampliseq)
+  --pipeline X         ampliseq name or path. Default: AMPLISEQ_HOME from
+                       ~/.rieux_ampliseq.conf, or else nf-core/ampliseq
   --revision TAG       pipeline version to pin (e.g. 2.15.0). Without it,
                        Nextflow pulls whatever is current on GitHub — which
                        means two runs months apart are NOT the same pipeline.
@@ -354,6 +357,21 @@ echo
 if [[ -z "${DB_SILVA_GENERO:-}" && -r "$AQUI/bin/env.sh" ]]; then
     # shellcheck disable=SC1091
     source "$AQUI/bin/env.sh" || exit 1
+fi
+
+# O env.sh so e carregado quando os bancos ainda nao estao no ambiente. Numa
+# sessao que ja os tem, ele nao roda — e o AMPLISEQ_HOME do arquivo de
+# configuracao nunca chegaria aqui. Entao lemos o arquivo tambem por conta
+# propria, sem sobrescrever o que ja veio do ambiente.
+if [[ -z "${AMPLISEQ_HOME:-}" && -r "$HOME/.rieux_ampliseq.conf" ]]; then
+    # shellcheck disable=SC1090
+    source "$HOME/.rieux_ampliseq.conf"
+fi
+
+# --pipeline tem a ultima palavra; depois dele, AMPLISEQ_HOME; e so entao o nome
+# remoto, que e o caminho que quebrou seis regioes de uma vez.
+if [[ -z "$PIPE" ]]; then
+    PIPE="${AMPLISEQ_HOME:-nf-core/ampliseq}"
 fi
 
 # =================================================================== organizar

@@ -58,7 +58,8 @@ while [[ $# -gt 0 ]]; do
         --mode)      MODE="${2:?--mode needs a value}"; shift 2 ;;
         --base)      BASE="${2:?--base needs a path}"; shift 2 ;;
         --ampliseq)  AMPLISEQ="${2:?--ampliseq needs a path}"; shift 2 ;;
-        --base=*)    BASE="${1#*=}"; shift ;;
+        --base=*)     BASE="${1#*=}"; shift ;;
+        --ampliseq=*) AMPLISEQ="${1#*=}"; shift ;;
         --uninstall) UNINSTALL=1; shift ;;
         -h|--help)   usage; exit 0 ;;
         *)           usage; exit 1 ;;
@@ -153,11 +154,23 @@ else
 fi
 
 # ---------------------------------------------------------- pipeline base dir
-if [[ -z "$BASE" && -r "$CONF" ]]; then
+# O arquivo e lido UMA vez, aqui, antes de qualquer reescrita. Ele e regravado
+# do zero mais abaixo; ler depois disso perderia o que ja estava la — foi assim
+# que um `--base` explicito apagava um AMPLISEQ_HOME gravado antes.
+CONF_BASE=""
+CONF_AMPLISEQ=""
+if [[ -r "$CONF" ]]; then
     # shellcheck disable=SC1090
     source "$CONF"
-    BASE="${RIEUX_PIPELINE_BASE:-}"
-    [[ -n "$BASE" ]] && echo "Reusing RIEUX_PIPELINE_BASE from $CONF"
+    CONF_BASE="${RIEUX_PIPELINE_BASE:-}"
+    CONF_AMPLISEQ="${AMPLISEQ_HOME:-}"
+fi
+if [[ -z "$BASE" && -n "$CONF_BASE" ]]; then
+    BASE="$CONF_BASE"
+    echo "Reusing RIEUX_PIPELINE_BASE from $CONF"
+fi
+if [[ -z "$AMPLISEQ" && -n "$CONF_AMPLISEQ" ]]; then
+    AMPLISEQ="$CONF_AMPLISEQ"
 fi
 if [[ -z "$BASE" ]]; then
     echo ""
@@ -169,22 +182,21 @@ if [[ -z "$BASE" ]]; then
         echo "(no terminal: skipped. Re-run with --base DIR when you know it.)"
     fi
 fi
-if [[ -n "$BASE" ]]; then
-    BASE="${BASE/#\~/$HOME}"
-    printf 'RIEUX_PIPELINE_BASE=%s\n' "$BASE" > "$CONF"
+[[ -n "$BASE" ]]     && BASE="${BASE/#\~/$HOME}"
+[[ -n "$AMPLISEQ" ]] && AMPLISEQ="${AMPLISEQ/#\~/$HOME}"
+
+# O arquivo e escrito de uma vez so, com tudo que sabemos agora. Acrescentar
+# linha a linha e o que produz arquivos com a mesma chave duas vezes.
+if [[ -n "$BASE" || -n "$AMPLISEQ" ]]; then
+    : > "$CONF"
+    [[ -n "$BASE" ]]     && printf 'RIEUX_PIPELINE_BASE=%s\n' "$BASE"     >> "$CONF"
+    [[ -n "$AMPLISEQ" ]] && printf 'AMPLISEQ_HOME=%s\n'       "$AMPLISEQ" >> "$CONF"
     echo "Wrote $CONF"
-    [[ -d "$BASE" ]] || echo "WARNING: $BASE does not exist yet."
 fi
-if [[ -z "$AMPLISEQ" && -r "$CONF" ]]; then
-    # shellcheck disable=SC1090
-    source "$CONF"
-    AMPLISEQ="${AMPLISEQ_HOME:-}"
+if [[ -n "$BASE" && ! -d "$BASE" ]]; then
+    echo "WARNING: $BASE does not exist yet."
 fi
 if [[ -n "$AMPLISEQ" ]]; then
-    AMPLISEQ="${AMPLISEQ/#\~/$HOME}"
-    grep -q '^AMPLISEQ_HOME=' "$CONF" 2>/dev/null \
-        && sed -i "s|^AMPLISEQ_HOME=.*|AMPLISEQ_HOME=$AMPLISEQ|" "$CONF" \
-        || printf 'AMPLISEQ_HOME=%s\n' "$AMPLISEQ" >> "$CONF"
     echo "Local ampliseq pinned: $AMPLISEQ"
     [[ -d "$AMPLISEQ" ]] || echo "WARNING: $AMPLISEQ does not exist yet."
 else
