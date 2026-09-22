@@ -68,7 +68,7 @@ elif [[ -n "$IMG" ]]; then
     # bindar apenas o caminho aparente, o container abre o link e nao acha o
     # alvo. Entao resolvemos os caminhos de verdade e bindamos as raizes.
     declare -A RAIZES=()
-    primeiro_r1=$(find -L "$BRUTOS" -name '*_R1_*.fastq.gz' -print -quit 2>/dev/null || true)
+    primeiro_r1=$(find -L "$BRUTOS" -name '*_R1*.fastq.gz' -print -quit 2>/dev/null || true)
     for alvo in "$BRUTOS" "$SAIDA" "$TABELA" "$primeiro_r1" "$PWD"; do
         [[ -e "$alvo" ]] || continue
         real=$(readlink -f "$alvo")
@@ -118,7 +118,16 @@ for r in "${REGIOES[@]}" unknown; do mkdir -p "$SAIDA/split/$r"; done
 # Com LOTE=10, 297 amostras cabem em 30 indices.
 LOTE="${LOTE:-10}"
 
-mapfile -t R1S < <(find -L "$BRUTOS" -name '*_R1_*.fastq.gz' | sort)
+# DUAS convencoes de nome, nao uma.
+#
+# O BaseSpace entrega  <id>_S1_L001_R1_001.fastq.gz
+# O estagio `organize` entrega  <amostra>_R1.fastq.gz
+#
+# Este script so conhecia a primeira, porque antes era chamado direto sobre o
+# diretorio do BaseSpace. Encadeado depois do organize, ele nao achava arquivo
+# nenhum e reportava "task N has no samples" — uma falha que parece ausencia de
+# dado e na verdade e desencontro de padrao entre dois estagios nossos.
+mapfile -t R1S < <(find -L "$BRUTOS" -name '*_R1*.fastq.gz' | sort)
 TOTAL=${#R1S[@]}
 NTAREFAS=$(( (TOTAL + LOTE - 1) / LOTE ))
 
@@ -141,8 +150,12 @@ echo "task $IDX/$NTAREFAS: samples $((INICIO+1)) to $((FIM+1)) of $TOTAL"
 # sem ancora (^): o bloco de fase desloca o primer de 0 a 11 bases
 for (( k = INICIO; k <= FIM; k++ )); do
     R1="${R1S[$k]}"
-    R2="${R1/_R1_/_R2_}"
-    AMOSTRA=$(basename "$R1" | sed -E 's/_S[0-9]+_L[0-9]+_R1.*//')
+    # tenta primeiro a forma sem sufixo (<amostra>_R1.fastq.gz); se nao casar,
+    # cai na forma do BaseSpace (..._R1_001.fastq.gz)
+    R2="${R1/%_R1.fastq.gz/_R2.fastq.gz}"
+    [[ "$R2" == "$R1" ]] && R2="${R1/_R1_/_R2_}"
+    AMOSTRA=$(basename "$R1" .fastq.gz)
+    AMOSTRA=$(printf '%s' "$AMOSTRA" | sed -E 's/(_S[0-9]+)?(_L[0-9]+)?_R1(_[0-9]+)?$//')
     JSON="$SAIDA/relatorios/${AMOSTRA}.cutadapt.json"
 
     if [[ ! -f "$R2" ]]; then
