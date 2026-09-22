@@ -43,6 +43,10 @@ cd rieux_ampliseq
 source ~/.bashrc
 ```
 
+If your shell refuses to run it — which happens when the repository arrived as
+a ZIP, since ZIP downloads drop the executable bit — use `bash install.sh
+--mode command` instead. A `git clone` carries the bit and needs no chmod.
+
 The installer asks where your pipeline installation lives — the directory
 holding `nextflow_home/`, `singularity/` and `bancos.env` — and saves it to
 `~/.rieux_ampliseq.conf`. Pass it directly with `--base DIR` to skip the

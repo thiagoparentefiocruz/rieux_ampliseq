@@ -222,4 +222,4 @@ for (( k = INICIO; k <= FIM; k++ )); do
         }
 done
 
-echo "tarefa $IDX concluida"
+echo "task $IDX done"
