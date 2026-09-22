@@ -86,6 +86,9 @@ trap 'echo; echo "interrupted by user."; exit 130' INT
 
 ESTAGIOS=(organize discover split profile run sidle collect)
 
+# -1 = o estagio `run` nao rodou nesta invocacao. 0 = rodou e nada deu certo.
+REGIOES_OK=-1
+
 # ------------------------------------------------------------------ padroes
 PROJETO=""
 RAIZ=""
@@ -450,6 +453,19 @@ if rodar_estagio run; then
     precisa "$PARAMS" "the truncLen table" profile
     precisa "$SS_DIR" "the per-region samplesheets" split
 
+    # Nome remoto + sem --revision = "a versao mais nova de hoje". Nada no log
+    # do Nextflow chama isso de problema, e o sintoma aparece so na primeira
+    # tarefa: master exigindo um Nextflow mais novo que o do cluster derrubou
+    # seis regioes de uma vez aqui.
+    if [[ "$PIPE" != /* && "$PIPE" != ./* && -z "$REVISAO" ]]; then
+        echo "  WARNING: --pipeline '$PIPE' is a remote name and no --revision" >&2
+        echo "           was given. Nextflow will pull whatever is current on" >&2
+        echo "           GitHub, which may need a newer Nextflow than this" >&2
+        echo "           cluster has, and makes the run unreproducible." >&2
+        echo "           Use --revision 2.15.0, or point --pipeline at a local copy." >&2
+        echo >&2
+    fi
+
     if command -v sinfo >/dev/null 2>&1; then
         sinfo -h -p "$PARTICAO" -o '%P' 2>/dev/null | grep -q . || {
             echo "ERROR: partition '$PARTICAO' does not exist on this cluster" >&2
@@ -547,6 +563,7 @@ if rodar_estagio run; then
     else
         [[ ${#OK[@]} -gt 0 ]] && echo "  done      : ${OK[*]}"
     fi
+    REGIOES_OK=${#OK[@]}
     [[ ${#PULADO[@]} -gt 0 ]] && echo "  skipped   : ${PULADO[*]}"
     [[ ${#FALHOU[@]} -gt 0 ]] && echo "  failed    : ${FALHOU[*]}"
     echo
@@ -596,6 +613,14 @@ fi
 
 # ================================================================== consolidar
 if rodar_estagio collect; then
+    # Consolidar depois de todas as regioes falharem escreve seis arquivos
+    # vazios com cara de resultado. Melhor nao escrever nada.
+    if (( REGIOES_OK == 0 )); then
+        echo "== collect: skipped ==========================================="
+        echo "  Every region failed, so there is nothing to consolidate."
+        echo "  Fix the cause, re-run --from run, then --stage collect."
+        exit 1
+    fi
     echo "== collect =================================================="
     exec_cmd python3 "$AQUI/bin/collect_metrics.py" \
              --results "$RAIZ" --name "$PROJETO" \

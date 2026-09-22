@@ -25,6 +25,14 @@ if [[ -z "${RIEUX_PIPELINE_BASE:-}" && -r "$HOME/.rieux_ampliseq.conf" ]]; then
     # shellcheck disable=SC1090
     source "$HOME/.rieux_ampliseq.conf"
 fi
+# AMPLISEQ_HOME, quando definido no mesmo arquivo de configuracao, aponta para
+# uma copia LOCAL do pipeline. Sem ele o wrapper usa o nome remoto
+# 'nf-core/ampliseq', e o Nextflow baixa o que estiver corrente no GitHub — que
+# pode exigir uma versao de Nextflow mais nova que a do cluster. Foi assim que
+# seis regioes falharam de uma vez: master exigindo >=25.10.4 contra o 25.10.2
+# do modulo.
+[[ -n "${AMPLISEQ_HOME:-}" ]] && export AMPLISEQ_HOME
+
 BASE="${RIEUX_PIPELINE_BASE:-}"
 if [[ -z "$BASE" || ! -d "$BASE" ]]; then
     echo "ERROR: RIEUX_PIPELINE_BASE is not set (or points nowhere)." >&2

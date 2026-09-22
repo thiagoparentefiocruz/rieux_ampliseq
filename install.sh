@@ -42,17 +42,22 @@ Modes:
 Options:
   --base DIR   your pipeline installation (containers, NXF_HOME, bancos.env).
                Asked interactively if omitted; saved to ~/.rieux_ampliseq.conf
+  --ampliseq DIR  a LOCAL copy of nf-core/ampliseq. Strongly recommended:
+               without it Nextflow pulls whatever is current on GitHub, which
+               may require a newer Nextflow than your cluster module has.
   --uninstall  remove the command and the rc lines (keeps the config file)
 EOF
 }
 
 MODE=""
 BASE=""
+AMPLISEQ=""
 UNINSTALL=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode)      MODE="${2:?--mode needs a value}"; shift 2 ;;
         --base)      BASE="${2:?--base needs a path}"; shift 2 ;;
+        --ampliseq)  AMPLISEQ="${2:?--ampliseq needs a path}"; shift 2 ;;
         --base=*)    BASE="${1#*=}"; shift ;;
         --uninstall) UNINSTALL=1; shift ;;
         -h|--help)   usage; exit 0 ;;
@@ -169,6 +174,24 @@ if [[ -n "$BASE" ]]; then
     printf 'RIEUX_PIPELINE_BASE=%s\n' "$BASE" > "$CONF"
     echo "Wrote $CONF"
     [[ -d "$BASE" ]] || echo "WARNING: $BASE does not exist yet."
+fi
+if [[ -z "$AMPLISEQ" && -r "$CONF" ]]; then
+    # shellcheck disable=SC1090
+    source "$CONF"
+    AMPLISEQ="${AMPLISEQ_HOME:-}"
+fi
+if [[ -n "$AMPLISEQ" ]]; then
+    AMPLISEQ="${AMPLISEQ/#\~/$HOME}"
+    grep -q '^AMPLISEQ_HOME=' "$CONF" 2>/dev/null \
+        && sed -i "s|^AMPLISEQ_HOME=.*|AMPLISEQ_HOME=$AMPLISEQ|" "$CONF" \
+        || printf 'AMPLISEQ_HOME=%s\n' "$AMPLISEQ" >> "$CONF"
+    echo "Local ampliseq pinned: $AMPLISEQ"
+    [[ -d "$AMPLISEQ" ]] || echo "WARNING: $AMPLISEQ does not exist yet."
+else
+    echo ""
+    echo "NOTE: no local ampliseq pinned (--ampliseq DIR). Without one, Nextflow"
+    echo "      pulls whatever is current on GitHub, which may require a newer"
+    echo "      Nextflow than your cluster module has."
 fi
 
 # ----------------------------------------------------------- prerequisites
