@@ -35,18 +35,61 @@ import random
 import sys
 from collections import Counter
 
-# Comprimento do inserto por regiao (amplicon menos os primers), a partir
-# das coordenadas canonicas em E. coli dos primers que recuperamos.
-# Sobrescreva com --insertos se medir os valores reais nos seus dados.
+# Comprimento do inserto por regiao (amplicon menos os primers).
+#
+# ESTES VALORES SAO MEDIDOS, NAO DERIVADOS DE COORDENADAS.
+#
+# A versao anterior usava as coordenadas canonicas dos primers em E. coli, e
+# isso nos custou caro: dava 271 para o V1V2 quando o real e ~310, e o truncLen
+# calculado a partir dali deixava o teto de fusao ABAIXO da mediana da
+# comunidade. Resultado: 98% dos pares do V1V2 nao fundiram, sem erro nenhum no
+# log. E. coli nao e a regua — a regua e o que amplifica de fato.
+#
+# Os numeros abaixo sao a mediana do amplicon extraido do SILVA por PCR in
+# silico com os primers do painel (bin/validate_sidle_regions.py), conferida
+# contra a distribuicao de comprimento dos ASVs observados. As duas batem nas
+# pontas em todas as seis regioes.
+#
+# Para OUTRO painel ou outra comunidade, meça de novo: --asv aponta para um
+# asv_length.tsv de uma execucao anterior e usa a mediana observada, que e
+# sempre melhor que qualquer tabela.
 INSERTO = {
-    "V1V2": 271,   # 27F  -> 338R
-    "V2V3": 375,   # 104F -> 519R
-    "V3V4": 425,   # 341F -> 806R
-    "V4V5": 371,   # 515F -> 926R
-    "V5V7": 348,   # 805F -> 1193R
-    "V7V9": 352,   # 1100F-> 1492R
+    "V1V2": 310,   # 27F  -> 338R
+    "V2V3": 392,   # 104F -> 519R
+    "V3V4": 421,   # 341F -> 806R
+    "V4V5": 372,   # 515F -> 926R
+    "V5V7": 368,   # 805F -> 1193R
+    "V7V9": 377,   # 1100F-> 1492R
     "ITS1": None,  # comprimento muito variavel: nao truncar
 }
+
+
+def insertos_medidos(caminho):
+    """Mediana do comprimento de ASV por regiao, de um asv_length.tsv."""
+    from collections import defaultdict
+    hist = defaultdict(lambda: defaultdict(int))
+    with open(caminho) as fh:
+        cab = fh.readline().rstrip("\n").split("\t")
+        idx = {n: i for i, n in enumerate(cab)}
+        creg = "region" if "region" in idx else "regiao"
+        clen = "length" if "length" in idx else "comprimento"
+        for linha in fh:
+            c = linha.rstrip("\n").split("\t")
+            if len(c) < len(cab):
+                continue
+            hist[c[idx[creg]]][int(c[idx[clen]])] += int(c[idx["n_asv"]])
+    out = {}
+    for reg, h in hist.items():
+        total = sum(h.values())
+        if not total:
+            continue
+        acum = 0
+        for v in sorted(h):
+            acum += h[v]
+            if acum >= total / 2.0:
+                out[reg] = v
+                break
+    return out
 
 SOBREPOSICAO_MIN = 20
 EE_MAX = 2.0            # erro esperado acumulado tolerado, padrao do DADA2
@@ -108,11 +151,23 @@ def main():
                     help="overlap to aim for. Measured in the pilot: 50 merges better "
                          "than 89. Do not truncate at the maximum.")
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--asv", default=None,
+                    help="asv_length.tsv from an earlier run; the observed median per "
+                         "region replaces the built-in table")
     ap.add_argument("--out", default=None,
                     help="write the chosen truncLen values as region_params.tsv")
     args = ap.parse_args()
 
     random.seed(args.seed)
+
+    if args.asv:
+        medidos = insertos_medidos(args.asv)
+        for reg, v in medidos.items():
+            if INSERTO.get(reg) is not None or reg not in INSERTO:
+                INSERTO[reg] = v
+        print("insert lengths taken from %s: %s\n"
+              % (args.asv, ", ".join("%s=%d" % (r, medidos[r])
+                                     for r in sorted(medidos))))
     regioes = sorted(d for d in os.listdir(args.split)
                      if os.path.isdir(os.path.join(args.split, d)) and d != "unknown")
 
