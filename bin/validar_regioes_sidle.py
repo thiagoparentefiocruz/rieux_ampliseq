@@ -272,6 +272,7 @@ def main():
               "descreve a referencia e nao valida nada.\n" % args.asv)
 
     linhas_saida = []
+    recuperados = {}
     print("%-6s %6s   %-26s %-26s  %s" %
           ("regiao", "recup", "referencia (in silico)", "ASVs observados",
            "diagnostico"))
@@ -284,7 +285,9 @@ def main():
 
         hist_ref = defaultdict(int)
         achados = 0
-        for seq in refs:
+        sem_fw = sem_rv = sem_par = 0
+        indices_ok = set()
+        for i_seq, seq in enumerate(refs):
             # Primers de regioes vizinhas do painel se sobrepoem no gene — o
             # 338R com o 341F, o 805F com o 806R (essa colisao ja nos apareceu
             # no roteamento das reads, com 11% delas). Entao pegar o primeiro
@@ -293,10 +296,13 @@ def main():
             # validos e ficamos com o mais curto: o par espurio sempre atravessa
             # regiao inteira a mais, entao e' sempre o mais longo.
             melhor = None
+            viu_fw = viu_rv = False
             for mf in rx_f.finditer(seq):
+                viu_fw = True
                 mr = rx_r.search(seq, mf.end())
                 if not mr:
                     continue
+                viu_rv = True
                 # entre os primers, SEM eles — que e' exatamente o que o
                 # cutadapt deixa nos nossos ASVs
                 comp = mr.start() - mf.end()
@@ -306,25 +312,51 @@ def main():
             if melhor is not None:
                 hist_ref[melhor] += 1
                 achados += 1
+                indices_ok.add(i_seq)
+            elif not viu_fw:
+                # nem o forward aparece. Numa sequencia de SSU isso quase sempre
+                # significa que ela COMECA depois do sitio, nao que o primer
+                # esteja errado: as entradas do SILVA sao frequentemente
+                # truncadas nas duas pontas.
+                sem_fw += 1
+            elif not viu_rv:
+                sem_rv += 1
+            else:
+                sem_par += 1
+        recuperados[regiao] = indices_ok
 
         recup = 100.0 * achados / len(refs) if refs else 0.0
         hist_obs = obs.get(regiao, {})
 
         # ---- diagnostico
+        #
+        # A comparacao e' entre as PONTAS das duas distribuicoes (p5 e p95), nao
+        # entre as medianas.
+        #
+        # Comparar medianas foi meu primeiro criterio e estava errado: a
+        # referencia e a amostra nao tem a mesma composicao. O SILVA e um censo
+        # taxonomico amplo; um intestino de camundongo e' meia duzia de clados.
+        # Taxons diferentes tem comprimento de regiao diferente, entao as duas
+        # medianas podem divergir 15-20 nt com as bordas perfeitamente certas —
+        # e foi exatamente o que aconteceu no V2V3 e no V3V4.
+        #
+        # Deslocamento de borda e outra coisa: ele move a distribuicao INTEIRA
+        # pelo mesmo tanto. Por isso quem denuncia sao as pontas.
         diag = []
         if regiao.startswith("ITS"):
             # esperado: o banco e' 16S, o ITS nao esta la. Nao e' defeito do
             # primer, e sinalizar como defeito mandaria caçar problema que nao
             # existe.
             diag.append("fora do escopo (banco 16S)")
-        elif recup < 20:
-            diag.append("RECUPERACAO BAIXA — primer suspeito")
         if hist_ref and hist_obs:
-            d = percentil(hist_obs, 50) - percentil(hist_ref, 50)
-            if abs(d) <= 5:
+            d5 = percentil(hist_obs, 5) - percentil(hist_ref, 5)
+            d95 = percentil(hist_obs, 95) - percentil(hist_ref, 95)
+            if abs(d5) <= 8 and abs(d95) <= 8:
                 diag.append("bordas batem")
+            elif abs(d5 - d95) <= 8:
+                diag.append("DESLOCAMENTO de %+d nt" % ((d5 + d95) // 2))
             else:
-                diag.append("DESLOCAMENTO de %+d nt" % d)
+                diag.append("pontas discordam (%+d / %+d nt)" % (d5, d95))
         elif not hist_obs:
             diag.append("sem ASV observado")
 
@@ -342,6 +374,9 @@ def main():
         else:
             alvo = 0
 
+        if regiao.startswith("ITS"):
+            alvo = 0   # nao vai para o regions_multiregion.tsv de qualquer forma
+
         print("%-6s %5.1f%%   %-26s %-26s  %s"
               % (regiao, recup, resumo(hist_ref), resumo(hist_obs),
                  "; ".join(diag)))
@@ -350,6 +385,19 @@ def main():
                   "(mantem %.1f%% dos ASVs, %.1f%% da referencia)"
                   % ("", " " * 5, alvo, acima_de(hist_obs, alvo),
                      acima_de(hist_ref, alvo)))
+
+        # Recuperacao baixa tem duas causas com condutas opostas, e a diferenca
+        # esta em QUAL primer falta. Se o forward nao aparece mas o reverse
+        # apareceria, a sequencia do banco comeca depois do sitio — entrada
+        # truncada, nao primer errado. Se os dois aparecem mas nunca formam par
+        # valido, ai sim a suspeita e das bordas.
+        if recup < 60 and not regiao.startswith("ITS"):
+            n = len(refs)
+            print("%11s sem forward: %.0f%%   sem reverse: %.0f%%   "
+                  "par fora da faixa: %.0f%%"
+                  % ("", 100.0 * sem_fw / n, 100.0 * sem_rv / n,
+                     100.0 * sem_par / n))
+
         linhas_saida.append((regiao, alvo, fw, rv, recup))
 
     # ---- arquivo do --multiregion
@@ -368,12 +416,47 @@ def main():
 
     print("\nGravado %s com %d regioes (ITS excluido: o Sidle e' 16S)." %
           (args.out, n))
+
+    # ---- quantas referencias servem para o Sidle
+    #
+    # O ganho do Sidle vem de cruzar as regioes: uma referencia so ajuda a
+    # discriminar onde ela EXISTE. Uma referencia presente em duas regioes
+    # contribui menos que uma presente nas seis. Este numero e' o teto pratico
+    # da reconstrucao, e nenhuma outra linha da tabela acima o mostra.
+    regs16 = [r for r in recuperados if not r.startswith("ITS")]
+    if regs16:
+        total_am = len(refs)
+        todas = set.intersection(*[recuperados[r] for r in regs16])
+        print("\nCobertura do banco para o Sidle (de %d referencias amostradas):"
+              % total_am)
+        for k in range(len(regs16), 0, -1):
+            quantas = sum(1 for i in range(total_am)
+                          if sum(1 for r in regs16 if i in recuperados[r]) >= k)
+            marca = "  <- servem as %d regioes" % len(regs16) if k == len(regs16) else ""
+            print("  em >= %d regioes: %6d (%5.1f%%)%s"
+                  % (k, quantas, 100.0 * quantas / total_am, marca))
+        if 100.0 * len(todas) / total_am < 25:
+            print("\n  ATENCAO: poucas referencias cobrem as seis regioes. O Sidle")
+            print("  reconstroi a partir do banco, entao isso limita o que ele pode")
+            print("  resolver — e e' motivo para manter o ramo por regiao como")
+            print("  denominador, nao como alternativa.")
     print("\nComo ler isto:")
-    print("  'bordas batem'  -> primer e recorte corretos; pode seguir.")
-    print("  'DESLOCAMENTO'  -> a borda da referencia nao e' a dos ASVs. O sinal")
-    print("                     diz o lado e o numero, quantas bases.")
-    print("  'RECUPERACAO BAIXA' -> o primer nao encontra o sitio no banco;")
-    print("                     rode de novo com --erros 2 antes de concluir.")
+    print("  A coluna 'recup' e' quantas referencias contem a regiao — nao e'")
+    print("  medida de qualidade do primer. As entradas do SILVA sao truncadas")
+    print("  nas pontas, entao as regioes terminais recuperam menos por construcao.")
+    print("  A linha 'sem forward / sem reverse' separa as duas causas: falta do")
+    print("  primer de um lado so = entrada truncada; par fora da faixa = borda")
+    print("  suspeita.")
+    print()
+    print("  O diagnostico compara as PONTAS (p5 e p95) das duas distribuicoes,")
+    print("  nao as medianas: referencia e amostra nao tem a mesma composicao, e")
+    print("  duas medianas podem divergir 20 nt com as bordas perfeitamente certas.")
+    print("    'bordas batem'      -> primer e recorte corretos; pode seguir.")
+    print("    'DESLOCAMENTO'      -> a distribuicao inteira esta movida; o numero")
+    print("                           diz de quantas bases e para que lado.")
+    print("    'pontas discordam'  -> as duas pontas se movem de forma diferente;")
+    print("                           nao e' deslocamento de borda, e sim corte —")
+    print("                           veja se o truncLen esta limitando o merge.")
 
 
 if __name__ == "__main__":

@@ -295,10 +295,20 @@ def taxonomia(dir_regiao, nome, regiao, s_cls, s_abd, s_amo, s_prev,
 
 # ------------------------------------------------------------------ principal
 
-def regioes_em(dirbase):
-    return sorted(d for d in os.listdir(dirbase)
-                  if os.path.isdir(os.path.join(dirbase, d))
-                  and d not in NAO_REGIAO and not d.startswith("."))
+# Uma regiao de verdade se chama V3V4 ou ITS1. V1V2_t160_ruim e V4V5_t230 sao
+# execucoes de diagnostico que ficaram guardadas ao lado — uteis para comparar
+# antes/depois, mas final_reports/ e o contrato com o `aspp`, e ali elas
+# entrariam como se fossem regioes do painel. Entram so com --com-variantes.
+CANONICA = re.compile(r"^(V\d+V\d+|ITS\d*)$")
+
+
+def regioes_em(dirbase, variantes=False):
+    todas = sorted(d for d in os.listdir(dirbase)
+                   if os.path.isdir(os.path.join(dirbase, d))
+                   and d not in NAO_REGIAO and not d.startswith("."))
+    if variantes:
+        return todas
+    return [d for d in todas if CANONICA.match(d)]
 
 
 def main():
@@ -309,6 +319,8 @@ def main():
                     help="alternativa: <raiz>/resultados/<nome>/<REGIAO>/")
     ap.add_argument("--out", default=None, help="diretorio de saida")
     ap.add_argument("--regioes", nargs="*", default=None)
+    ap.add_argument("--com-variantes", action="store_true",
+                    help="inclui execucoes de diagnostico (V1V2_t160_ruim etc.)")
     ap.add_argument("--min-reads", type=int, default=1)
     ap.add_argument("--foco", default=None,
                     help="regex; imprime o detalhe por amostra dos taxons que casarem")
@@ -338,7 +350,8 @@ def main():
     focos = []
 
     for nome, dirbase in conjuntos:
-        regs = args.regioes if args.regioes else regioes_em(dirbase)
+        regs = args.regioes if args.regioes else regioes_em(dirbase,
+                                                            args.com_variantes)
         for regiao in regs:
             d = os.path.join(dirbase, regiao)
             if not os.path.isdir(d):
