@@ -231,8 +231,17 @@ def resumo(hist):
 # --------------------------------------------------------------- principal
 
 def main():
+    # O padrao e' a tabela que viaja no proprio repo, nao um arquivo que por
+    # acaso esteja no diretorio de onde se chamou. Uma ferramenta instalada no
+    # PATH e' chamada de qualquer lugar; procurar no cwd e' pedir para rodar com
+    # a tabela errada sem perceber.
+    aqui = os.path.dirname(os.path.abspath(__file__))
+    padrao_primers = os.path.join(aqui, os.pardir, "assets", "primers_painel.tsv")
+    if not os.path.isfile(padrao_primers):
+        padrao_primers = "primers_painel.tsv"
+
     ap = argparse.ArgumentParser()
-    ap.add_argument("--primers", default="primers_painel.tsv")
+    ap.add_argument("--primers", default=padrao_primers)
     ap.add_argument("--ref", required=True,
                     help="fasta do banco de referencia (pode ser .gz)")
     ap.add_argument("--asv", default=None,
