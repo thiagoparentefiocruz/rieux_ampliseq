@@ -98,18 +98,18 @@ def corte_por_ee(soma, n, limite):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("split", help="diretorio split/ (o que tem as regioes dentro)")
-    ap.add_argument("--amostras", type=int, default=12)
+    ap.add_argument("split", help="the split/ directory (the one holding the regions)")
+    ap.add_argument("--samples", type=int, default=12)
     ap.add_argument("--reads", type=int, default=20000)
     ap.add_argument("--ee", type=float, default=EE_MAX)
     ap.add_argument("--overlap", type=int, default=SOBREPOSICAO_MIN,
-                    help="sobreposicao minima aceitavel")
-    ap.add_argument("--overlap-alvo", type=int, default=50,
-                    help="sobreposicao que se pretende obter. Medido no piloto: "
-                         "50 funde melhor que 89. Nao truncar no maximo.")
+                    help="minimum acceptable overlap")
+    ap.add_argument("--overlap-target", type=int, default=50,
+                    help="overlap to aim for. Measured in the pilot: 50 merges better "
+                         "than 89. Do not truncate at the maximum.")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--out", default=None,
-                    help="grava os truncLen escolhidos como region_params.tsv")
+                    help="write the chosen truncLen values as region_params.tsv")
     args = ap.parse_args()
 
     random.seed(args.seed)
@@ -117,7 +117,7 @@ def main():
                      if os.path.isdir(os.path.join(args.split, d)) and d != "unknown")
 
     print("%-7s %6s %6s %7s %7s %9s  %s"
-          % ("REGIAO", "truncF", "truncR", "inserto", "sobrep", "reads", "observacao"))
+          % ("REGION", "truncF", "truncR", "insert", "overlap", "reads", "note"))
     print("-" * 82)
 
     linhas_cfg = []
@@ -125,9 +125,9 @@ def main():
         r1s = sorted(glob.glob(os.path.join(args.split, reg, "*_R1.fastq.gz")))
         r1s = [f for f in r1s if os.path.getsize(f) > 10000]
         if not r1s:
-            print("%-7s %s" % (reg, "sem arquivos com dado"))
+            print("%-7s %s" % (reg, "no files with data"))
             continue
-        escolhidos = random.sample(r1s, min(args.amostras, len(r1s)))
+        escolhidos = random.sample(r1s, min(args.samples, len(r1s)))
         por = max(1, args.reads // len(escolhidos))
 
         somaF = nF = somaR = nR = None
@@ -153,7 +153,7 @@ def main():
         if inserto is None:
             print("%-7s %6s %6s %7s %7s %9d  %s"
                   % (reg, "-", "-", "variavel", "-", total,
-                     "ITS: nao truncar (--illumina_pe_its)"))
+                     "ITS: do not truncate (--illumina_pe_its)"))
             continue
 
         # O corte se aplica a read JA sem bloco de fase e sem primer, e o
@@ -179,7 +179,7 @@ def main():
         # Sobra maior nao ajuda: o DADA2 exige sobreposicao sem discordancia,
         # entao cada base extra ali e mais uma chance de erro derrubar o par,
         # e as bases extras sao as do fim da read, as piores.
-        alvo = inserto + args.overlap_alvo
+        alvo = inserto + args.overlap_target
         if cF + cR > alvo:
             tF = min(tetoF, cF, (alvo + 1) // 2)
             tR = min(tetoR, cR, alvo // 2)
@@ -202,20 +202,20 @@ def main():
                 add = (falta + 1) // 2
                 cF, cR = min(teto, cF + add), min(teto, cR + add)
                 sobrep = cF + cR - inserto
-                obs = "estendido alem do corte por EE para fechar o merge"
+                obs = "extended past the EE cut to close the merge"
             else:
-                obs = "NAO FECHA: faltam %d pb mesmo no limite da read" % falta
+                obs = "DOES NOT CLOSE: %d bp short even at the read limit" % falta
         linhas_cfg.append((reg, cF, cR))
         print("%-7s %6d %6d %7d %7d %9d  %s" % (reg, cF, cR, inserto, sobrep, total, obs))
 
-    print("\nDistribuicao dos bins de qualidade (confirma o binning do NextSeq):")
+    print("\nQuality bin distribution (confirms the NextSeq binning):")
     for q, c in sorted(binsT.items()):
         print("  Q%-3d %10d" % (q, c))
 
-    print("\nParametros para o ampliseq, por regiao:")
+    print("\nampliseq parameters, per region:")
     for reg, cF, cR in linhas_cfg:
         print("  %-7s --trunclenf %d --trunclenr %d" % (reg, cF, cR))
-    print("\n  (ITS1: usar --illumina_pe_its --cut_its its1, sem trunclen)")
+    print("\n  (ITS1: use --illumina_pe_its --cut_its its1, no trunclen)")
 
     # Escrever o TSV, e nao so imprimir, e o que permite este passo ser um
     # ESTAGIO do wrapper em vez de uma consulta que alguem transcreve na mao.
@@ -236,7 +236,7 @@ def main():
                              % reg)
                 else:
                     fh.write("%s\t%d\t%d\tsilva\t\n" % (reg, cF, cR))
-        print("\nGravado %s" % args.out)
+        print("\nWrote %s" % args.out)
 
 
 if __name__ == "__main__":

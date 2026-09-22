@@ -180,9 +180,14 @@ def reformatar(bruto, db_dir):
 
 
 def main():
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        # Sem argparse aqui de proposito (o script tem um argumento so), mas
+        # uma ferramenta publica que nao responde a --help e uma porta fechada.
+        print(__doc__.strip())
+        return 0
     env_path = sys.argv[1] if len(sys.argv) > 1 else PADRAO
     if not os.path.isfile(env_path):
-        sys.exit("ERRO: %s nao encontrado" % env_path)
+        sys.exit("ERROR: %s not found" % env_path)
 
     env = ler_env(env_path)
     base_dir = os.path.dirname(os.path.abspath(env_path))
@@ -192,7 +197,7 @@ def main():
     # o que torna a reexecucao segura — nunca reformatamos duas vezes.
     orig = env.get("DB_UNITE_BRUTO") or env.get("DB_UNITE_TARBALL") or env.get("DB_UNITE")
     if not orig or not os.path.isfile(orig):
-        sys.exit("ERRO: DB_UNITE ausente ou apontando para arquivo inexistente")
+        sys.exit("ERROR: DB_UNITE missing, or pointing at a file that does not exist")
 
     print("Fonte : %s" % orig)
     tipo, inicio = formato(orig)
@@ -200,7 +205,7 @@ def main():
 
     if tipo == "desconhecido":
         print("Primeiros bytes: %r" % inicio[:80], file=sys.stderr)
-        sys.exit("ERRO: nem FASTA nem tar.")
+        sys.exit("ERROR: neither FASTA nor tar.")
 
     # ---- 1. desempacotar, se for tarball
     tarball = orig if tipo == "tar" else env.get("DB_UNITE_TARBALL", "")
@@ -218,7 +223,7 @@ def main():
                 if a.endswith((".fasta", ".fa", ".fna")):
                     fastas.append(os.path.join(raiz, a))
         if not fastas:
-            sys.exit("ERRO: nenhum FASTA dentro do tarball.")
+            sys.exit("ERROR: no FASTA inside the tarball.")
 
         print("\nFASTA encontrados:")
         for f in sorted(fastas):
@@ -235,7 +240,7 @@ def main():
                              + ".fasta.gz")
         with open(escolhido, "rb") as ent, gzip.open(bruto, "wb") as sai:
             shutil.copyfileobj(ent, sai)
-        print("Bruto gravado: %s (%.1f MB)" % (bruto, os.path.getsize(bruto) / 1e6))
+        print("Raw file written: %s (%.1f MB)" % (bruto, os.path.getsize(bruto) / 1e6))
     else:
         bruto = orig
 
@@ -244,7 +249,7 @@ def main():
         primeiro = fh.readline().rstrip("\n")
     if "k__" not in primeiro:
         print("\nCabecalho: %s" % primeiro[:120], file=sys.stderr)
-        sys.exit("ERRO: este arquivo nao tem prefixos de rank ('k__').\n"
+        sys.exit("ERROR: this file has no rank prefixes ('k__').\n"
                  "      Parece ja reformatado. Aponte DB_UNITE_BRUTO para o\n"
                  "      download original antes de rodar de novo.")
 
@@ -274,7 +279,7 @@ def main():
     with open(env_path, "w") as fh:
         fh.writelines(linhas)
 
-    print("\nbancos.env atualizado (backup em %s.bak):" % env_path)
+    print("\nbancos.env updated (backup at %s.bak):" % env_path)
     for chave, valor in sorted(ler_env(env_path).items()):
         if chave.startswith("DB_"):
             print("  %-20s %s" % (chave, valor))

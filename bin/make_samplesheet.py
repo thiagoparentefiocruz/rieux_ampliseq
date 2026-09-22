@@ -42,8 +42,8 @@ def ler(caminho):
         idx = {n: i for i, n in enumerate(cab)}
         for obrig in ("sample", "fastq_1", "fastq_2"):
             if obrig not in idx:
-                sys.exit("ERRO: %s nao tem a coluna '%s' — este script espera o "
-                         "metadata.tsv do organize_project.py"
+                sys.exit("ERROR: %s has no '%s' column — this script expects the "
+                         "metadata.tsv written by organize_project.py"
                          % (caminho, obrig))
         linhas = []
         for l in fh:
@@ -60,22 +60,22 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("metadata", nargs="+")
     ap.add_argument("--out", default=None,
-                    help="arquivo de saida (so com um metadata de entrada)")
+                    help="output file (only with a single input metadata)")
     ap.add_argument("--out-dir", default=None,
-                    help="diretorio; grava samplesheet_completo_<nome>.tsv")
-    ap.add_argument("--sem-controles", action="store_true",
-                    help="exclui os Smart Controls. Por padrao eles ENTRAM: o "
-                         "construto sintetico tem sitio para os sete pares de "
-                         "primers, entao e' ele que valida o roteamento por "
-                         "regiao que o Sidle faz sozinho.")
-    ap.add_argument("--sem-checar", action="store_true",
-                    help="nao verifica se os FASTQ existem")
+                    help="directory; writes samplesheet_complete_<name>.tsv")
+    ap.add_argument("--no-controls", action="store_true",
+                    help="drop the Smart Controls. By default they are INCLUDED: the "
+                         "synthetic construct carries a site for all seven primer "
+                         "pairs, so it is what validates the per-region routing "
+                         "that Sidle does on its own.")
+    ap.add_argument("--no-check", action="store_true",
+                    help="do not check that the FASTQs exist")
     args = ap.parse_args()
 
     if not args.out and not args.out_dir:
-        sys.exit("ERRO: informe --out ou --out-dir")
+        sys.exit("ERROR: give --out or --out-dir")
     if args.out and len(args.metadata) > 1:
-        sys.exit("ERRO: --out so serve para um metadata; use --out-dir")
+        sys.exit("ERROR: --out only works for one metadata; use --out-dir")
 
     total_falta = 0
     for caminho in args.metadata:
@@ -87,10 +87,10 @@ def main():
             eh_ctrl = r.get("control", r.get("controle", "no")).strip().lower() in ("yes", "sim")
             if eh_ctrl:
                 controles += 1
-                if args.sem_controles:
+                if args.no_controls:
                     continue
             r1, r2 = r["fastq_1"], r["fastq_2"]
-            if not args.sem_checar and not (os.path.exists(r1) and os.path.exists(r2)):
+            if not args.no_check and not (os.path.exists(r1) and os.path.exists(r2)):
                 faltando.append((r["sample"], r1 if not os.path.exists(r1) else r2))
                 continue
             escolhidas.append((r["sample"], r1, r2))
@@ -100,7 +100,7 @@ def main():
         else:
             os.makedirs(args.out_dir, exist_ok=True)
             saida = os.path.join(args.out_dir,
-                                 "samplesheet_completo_%s.tsv" % nome)
+                                 "samplesheet_complete_%s.tsv" % nome)
         pasta = os.path.dirname(os.path.abspath(saida))
         if pasta:
             os.makedirs(pasta, exist_ok=True)
@@ -110,23 +110,23 @@ def main():
             for s, r1, r2 in escolhidas:
                 fh.write("%s\t%s\t%s\n" % (s, r1, r2))
 
-        print("%-12s %3d amostras (%d controle%s) -> %s"
+        print("%-12s %3d samples (%d control%s) -> %s"
               % (nome, len(escolhidas), controles,
                  "" if controles == 1 else "s", saida))
         if faltando:
             total_falta += len(faltando)
-            print("   %d FASTQ ausente(s) — symlink quebrado ou arquivo movido:"
+            print("   %d missing FASTQ(s) — broken symlink or moved file:"
                   % len(faltando))
             for s, f in faltando[:5]:
                 print("     %-22s %s" % (s, f))
             if len(faltando) > 5:
-                print("     ... e mais %d" % (len(faltando) - 5))
+                print("     ... and %d more" % (len(faltando) - 5))
 
     if total_falta:
-        print("\nATENCAO: %d arquivo(s) ausente(s). As amostras correspondentes"
+        print("\nWARNING: %d missing file(s). The matching samples were LEFT OUT"
               % total_falta)
-        print("ficaram FORA do samplesheet — conserte os links antes de rodar,")
-        print("ou a execucao vai adiante com menos amostras do que voce pensa.")
+        print("of the samplesheet — fix the links before running,")
+        print("or the run goes ahead with fewer samples than you think.")
         sys.exit(1)
 
 

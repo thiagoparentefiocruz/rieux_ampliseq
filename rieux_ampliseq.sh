@@ -305,7 +305,7 @@ if rodar_estagio organize; then
     precisa "$PLANILHA" "the sample table" organize
     precisa "$BRUTOS" "the raw FASTQ directory (--raw-dir)" organize
     exec_cmd python3 "$AQUI/bin/organize_project.py" "$PLANILHA" "$BRUTOS" \
-             "$RAIZ/projects" --controls "$CONTROLES" --executar || exit 1
+             "$RAIZ/projects" --controls "$CONTROLES" --apply || exit 1
     echo
     echo "  'organize' is one-to-many: it wrote one project per group under"
     echo "  $RAIZ/projects/. Continue one at a time:"
@@ -354,7 +354,7 @@ if rodar_estagio split; then
              --output="$LOGS/split_%A_%a.log" \
              "$AQUI/bin/split_regions.sh" "$BRUTOS" "$PRIMERS" "$SPLIT" || exit 1
     exec_cmd python3 "$AQUI/bin/split_summary.py" "$SPLIT" \
-             --minimo "$MIN_READS_REGIAO" || exit 1
+             --minimum "$MIN_READS_REGIAO" || exit 1
     echo
 fi
 
@@ -512,7 +512,7 @@ fi
 if rodar_estagio collect; then
     echo "== collect =================================================="
     exec_cmd python3 "$AQUI/bin/collect_metrics.py" \
-             --resultados "$RAIZ" --nome "$PROJETO" \
+             --results "$RAIZ" --name "$PROJETO" \
              --out "$RAIZ/final_reports" \
              --primers "$PRIMERS" --controls "$CONTROLES" || exit 1
     echo

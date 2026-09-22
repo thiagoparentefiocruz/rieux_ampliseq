@@ -378,21 +378,21 @@ def discover(reads, k, maxphase, max_mm, top, primer_len, min_frac, label):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dir", required=True, help="diretorio com os dados brutos")
-    ap.add_argument("--samples", type=int, default=24, help="quantas amostras amostrar")
-    ap.add_argument("--reads", type=int, default=50000, help="reads por amostra")
-    ap.add_argument("--out", default="primers_descobertos", help="prefixo de saida")
-    ap.add_argument("--k", type=int, default=18, help="tamanho do k-mer")
-    ap.add_argument("--maxphase", type=int, default=13, help="deslocamento maximo do phasing")
-    ap.add_argument("--primer-len", type=int, default=22, help="comprimento do primer a reportar")
-    ap.add_argument("--max-mm", type=int, default=2, help="discordancias toleradas")
+    ap.add_argument("--dir", required=True, help="directory holding the raw data")
+    ap.add_argument("--samples", type=int, default=24, help="how many samples to draw")
+    ap.add_argument("--reads", type=int, default=50000, help="reads per sample")
+    ap.add_argument("--out", default="primers_descobertos", help="output prefix")
+    ap.add_argument("--k", type=int, default=18, help="k-mer size")
+    ap.add_argument("--maxphase", type=int, default=13, help="maximum phasing shift")
+    ap.add_argument("--primer-len", type=int, default=22, help="primer length to report")
+    ap.add_argument("--max-mm", type=int, default=2, help="mismatches tolerated")
     ap.add_argument("--min-frac", type=float, default=0.01,
-                    help="fracao minima de reads para um motivo ser retido")
+                    help="minimum fraction of reads for a motif to be kept")
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--listar", action="store_true",
-                    help="so lista os pares R1/R2 encontrados e sai")
-    ap.add_argument("--filtrar", metavar="REGEX",
-                    help="usa so as amostras cujo nome casa com a expressao. "
+    ap.add_argument("--list", action="store_true",
+                    help="only list the R1/R2 pairs found, then exit")
+    ap.add_argument("--filter", metavar="REGEX",
+                    help="use only samples whose name matches the expression. "
                          "Ex.: --filtrar '^Smart' para rodar so nos controles, "
                          "onde o construto sintetico tem sitio para TODOS os "
                          "primers do painel e serve de gabarito.")
@@ -424,16 +424,16 @@ def main():
                      % (len(pairs), len(todos)))
     sys.stderr.write((", %d R1 sem par.\n" % orfaos) if orfaos else ".\n")
 
-    if args.filtrar:
-        padrao = re.compile(args.filtrar)
+    if args.filter:
+        padrao = re.compile(args.filter)
         antes = len(pairs)
         pairs = [p for p in pairs if padrao.search(p[0])]
         sys.stderr.write("Filtro '%s': %d de %d amostras -> %s\n"
-                         % (args.filtrar, len(pairs), antes,
+                         % (args.filter, len(pairs), antes,
                             ", ".join(s for s, _, _ in pairs[:8]) or "(nenhuma)"))
         if not pairs:
-            sys.exit("Nenhuma amostra casou com o filtro.")
-    if args.listar:
+            sys.exit("No sample matched the filter.")
+    if args.list:
         for s, f1, _f2 in pairs[:20]:
             sys.stderr.write("  %-12s %s\n" % (s, os.path.relpath(f1, raiz)))
         sys.exit(0)
@@ -471,9 +471,9 @@ def main():
     report("PRIMERS FORWARD (R1)", fwd)
     report("PRIMERS REVERSE (R2)", rev)
     print("\n(PHASE: reads por deslocamento, em centenas.  ESP: quantos")
-    print(" deslocamentos concentram >=2% das reads. Primer com bloco de fase")
+    print(" shifts carry >=2% of the reads. A phased primer spreads across")
     print(" espalha por varios; ESP=1 significa posicao fixa — o que pode ser")
-    print(" artefato OU um primer do painel que simplesmente nao e phased.)")
+    print(" an artefact OR a panel primer that simply is not phased.)")
 
     # ---- pareamento F x R: e o par que define a regiao, nao a read isolada
     #      varios primers do painel sao reverso-complementares entre si,
@@ -511,7 +511,7 @@ def main():
 
     print("\nEscrito: %s.tsv e %s.fasta  (%d regioes candidatas)"
           % (args.out, args.out, len(regions)))
-    print("Confira se o numero de regioes bate com o esperado: 7 (6 x 16S + ITS).")
+    print("Check that the number of regions matches what you expect: 7 (6 x 16S + ITS).")
 
 
 if __name__ == "__main__":

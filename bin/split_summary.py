@@ -60,29 +60,29 @@ def contar_reads(caminho):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("saida", help="diretorio usado no split_regions.sh")
-    ap.add_argument("--minimo", type=int, default=1000,
-                    help="piso de reads por amostra x regiao (padrao 1000)")
+    ap.add_argument("out_dir", help="diretorio usado no split_regions.sh")
+    ap.add_argument("--minimum", type=int, default=1000,
+                    help="floor of reads per sample x region (default 1000)")
     ap.add_argument("--jobs", type=int,
                     default=int(os.environ.get("SLURM_CPUS_PER_TASK", 8)),
-                    help="processos paralelos para contar os FASTQ")
-    ap.add_argument("--cabecalho", default="sampleID,forwardReads,reverseReads",
-                    help="nomes das colunas da samplesheet. O nf-core/ampliseq "
+                    help="parallel processes for counting the FASTQs")
+    ap.add_argument("--header", default="sampleID,forwardReads,reverseReads",
+                    help="samplesheet column names. nf-core/ampliseq "
                          "NAO usa o formato generico sample/fastq_1/fastq_2 — "
                          "ele tem os proprios nomes. Confira na sua versao com: "
                          "python3 -c \"import json,sys; "
                          "print(list(json.load(open(sys.argv[1]))"
                          "['items']['properties']))\" $WF/assets/schema_input.json")
-    ap.add_argument("--colaboradores", metavar="DIR",
-                    help="diretorio com <colaborador>/metadata.tsv (a saida do "
+    ap.add_argument("--projects-dir", metavar="DIR",
+                    help="directory holding <project>/metadata.tsv (the output of "
                          "organize_project.py). Com isso as samplesheets "
                          "saem por colaborador e por regiao, ja com o ID "
                          "original no lugar do ID de sequenciamento.")
     args = ap.parse_args()
 
-    split_dir = os.path.join(args.saida, "split")
+    split_dir = os.path.join(args.out_dir, "split")
     if not os.path.isdir(split_dir):
-        sys.exit("Nao achei %s" % split_dir)
+        sys.exit("%s not found" % split_dir)
 
     regioes = sorted(d for d in os.listdir(split_dir)
                      if os.path.isdir(os.path.join(split_dir, d))
@@ -134,16 +134,16 @@ def main():
         if frac < 90.0:
             problemas.append((amostra, frac))
         for r in regioes:
-            if 0 < d.get(r, 0) < args.minimo:
+            if 0 < d.get(r, 0) < args.minimum:
                 rasas.append((amostra, r, d[r]))
 
-    with open(os.path.join(args.saida, "split_summary.csv"), "w") as fh:
+    with open(os.path.join(args.out_dir, "split_summary.csv"), "w") as fh:
         w = csv.writer(fh)
         w.writerow(cab)
         w.writerows(linhas_csv)
 
     # ---- medianas por regiao
-    print("\nMediana por regiao:")
+    print("\nMedian per region:")
     for r in regioes:
         vals = sorted(d.get(r, 0) for d in tabela.values())
         mediana = vals[len(vals) // 2] if vals else 0
@@ -152,24 +152,24 @@ def main():
     # ---- criterio de aceite
     print("\n== Criterio de aceite ===========================================")
     if problemas:
-        print("  %d amostra(s) com menos de 90%% atribuido:" % len(problemas))
+        print("  %d sample(s) below 90%% assigned:" % len(problemas))
         for a, f in sorted(problemas, key=lambda x: x[1])[:15]:
             print("     %-20s %.1f%%" % (a, f))
         print("  Investigue antes de seguir: primer incompleto, contaminacao")
         print("  de outra biblioteca, ou adaptador residual.")
     else:
-        print("  Todas as amostras acima de 90% atribuido.")
+        print("  All samples above 90% assigned.")
 
     if rasas:
-        print("\n  %d par(es) amostra x regiao abaixo de %d reads "
-              "(excluidos das samplesheets):" % (len(rasas), args.minimo))
+        print("\n  %d sample x region pair(s) below %d reads "
+              "(excluidos das samplesheets):" % (len(rasas), args.minimum))
         for a, r, n in sorted(rasas, key=lambda x: x[2])[:15]:
             print("     %-20s %-10s %d" % (a, r, n))
 
     # ---- de qual colaborador e cada ID de sequenciamento
     dono_de, nome_de = {}, {}
-    if args.colaboradores:
-        for meta in glob.glob(os.path.join(args.colaboradores, "*", "metadata.tsv")):
+    if args.projects_dir:
+        for meta in glob.glob(os.path.join(args.projects_dir, "*", "metadata.tsv")):
             colaborador = os.path.basename(os.path.dirname(meta))
             with open(meta) as fh:
                 cab = fh.readline().rstrip("\n").split("\t")
@@ -183,23 +183,23 @@ def main():
                     dono_de[c[iseq]] = colaborador
                     nome_de[c[iseq]] = c[isam]
         controles = [a for a in tabela if a.lower().startswith("smart")]
-        print("\nColaboradores lidos: %d amostras mapeadas, %d controle(s)"
+        print("\nProjects read: %d samples mapped, %d control(s)"
               % (len(dono_de), len(controles)))
     else:
         controles = []
 
     # ---- samplesheets
     print("\n== Samplesheets =================================================")
-    ss_dir = os.path.join(args.saida, "samplesheets")
+    ss_dir = os.path.join(args.out_dir, "samplesheets")
 
-    colunas = [c.strip() for c in args.cabecalho.split(",")]
+    colunas = [c.strip() for c in args.header.split(",")]
 
     def escrever(caminho, reg, amostras):
         n = 0
         with open(caminho, "w") as fh:
             fh.write("\t".join(colunas) + "\n")
             for amostra in amostras:
-                if tabela.get(amostra, {}).get(reg, 0) < args.minimo:
+                if tabela.get(amostra, {}).get(reg, 0) < args.minimum:
                     continue
                 r1 = os.path.abspath(os.path.join(split_dir, reg,
                                                   "%s_R1.fastq.gz" % amostra))
@@ -228,15 +228,15 @@ def main():
                              reg, amostras)
                 linha.append("%s=%d" % (reg, n))
             print("  %-10s %s" % (colaborador, "  ".join(linha)))
-        print("\n  (cada samplesheet inclui os %d controle(s))" % len(controles))
+        print("\n  (each samplesheet includes the %d control(s))" % len(controles))
     else:
         os.makedirs(ss_dir, exist_ok=True)
         for reg in regioes:
             caminho = os.path.join(ss_dir, "samplesheet_%s.tsv" % reg)
             n = escrever(caminho, reg, sorted(tabela))
-            print("  %-10s %3d amostras  -> %s" % (reg, n, caminho))
+            print("  %-10s %3d samples  -> %s" % (reg, n, caminho))
 
-    print("\nTabela completa em %s" % os.path.join(args.saida, "split_summary.csv"))
+    print("\nTabela completa em %s" % os.path.join(args.out_dir, "split_summary.csv"))
 
 
 if __name__ == "__main__":

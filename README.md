@@ -82,15 +82,15 @@ From scratch, one command:
 
 ```bash
 screen -S renata
-rieux_ampliseq --project renata --raw-dir brutos/renata
+rieux_ampliseq --project renata --raw-dir raw/renata
 # Ctrl-A then D
 ```
 
 Re-entering in the middle, when what came before already exists:
 
 ```bash
-rieux_ampliseq --project renata --from rodar
-rieux_ampliseq --project renata --stage consolidar
+rieux_ampliseq --project renata --from run
+rieux_ampliseq --project renata --stage collect
 ```
 
 `organize` is skipped by default and is the only one-to-many stage: one sample
@@ -108,7 +108,7 @@ re-stating everything that came before:
   raw/                     FASTQs (symlinks), from `organize`
   metadata.tsv             sample -> group, from `organize`
   primers.tsv              from `discover`, or copied from --primers
-  region_params.tsv   truncLen per region, from `profile`
+  region_params.tsv        truncLen per region, from `profile`
   split/samplesheets/      from `split`
   <REGION>/                one ampliseq run, from `run`
   sidle/                   from `sidle`
@@ -124,14 +124,14 @@ a requirement. A stage whose input is missing says which stage produces it.
 The Nextflow driver runs on the **login node**, inside a `screen`. It sits idle
 waiting on SLURM and submits the tasks; it needs no allocation of its own.
 
-Regions run **in sequence**, on purpose: two regions of the same dataset would
-only compete for the same queue. Two **datasets** in parallel is a different
+Regions run **in sequence**, on purpose: two regions of the same project would
+only compete for the same queue. Two **projects** in parallel is a different
 matter — different partitions, and there the gain is real:
 
 ```bash
-rieux_ampliseq --project fabio    --from rodar                          # cpu
-rieux_ampliseq --project patricia --from rodar \
-                  --partition fat --work-dir exec/patricia
+rieux_ampliseq --project fabio    --from run                          # cpu
+rieux_ampliseq --project patricia --from run \
+               --partition fat --work-dir exec/patricia
 ```
 
 `--work-dir` is not optional in that case: Nextflow keeps `.nextflow.log`,
@@ -148,7 +148,7 @@ re-running after a failure picks up where it stopped.
 | `--project NAME` | label for the project; also its working directory |
 | `--outdir DIR` | project root (default `./<project>`) |
 | `--stage/--from/--until/--skip` | which stages to run |
-| `--raw-dir DIR` | raw FASTQs (default `<project>/brutos`) |
+| `--raw-dir DIR` | raw FASTQs (default `<project>/raw`) |
 | `--primers FILE` | skip `discover` — you already know your panel's primers |
 | `--params FILE` | skip `profile` — you already chose truncLen |
 | `--controls REGEX` | which sample names are controls (default `^[Ss]mart`) |
@@ -176,7 +176,7 @@ primer boundaries and the cut are chosen from data:
 bin/validate_sidle_regions.py \
     --primers assets/primers_panel.tsv \
     --ref "$DB_SILVA_GENERO" \
-    --asv resultados/fabio/final_reports/asv_length.tsv \
+    --asv fabio/final_reports/asv_length.tsv \
     --out regions_multiregion.tsv
 ```
 

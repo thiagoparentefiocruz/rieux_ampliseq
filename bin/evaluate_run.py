@@ -101,8 +101,8 @@ def main():
     ap.add_argument("outdir")
     ap.add_argument("--controls", default="^Smart")
     ap.add_argument("--min-merge", type=float, default=70.0)
-    ap.add_argument("--comparar", metavar="OUTRO_OUTDIR",
-                    help="compara a taxa de fusao amostra a amostra com outra "
+    ap.add_argument("--compare", metavar="OUTRO_OUTDIR",
+                    help="compare the per-sample merge rate against another "
                          "execucao. Serve para decidir parametros (truncLen, "
                          "por exemplo) com numero em vez de intuicao.")
     args = ap.parse_args()
@@ -110,13 +110,13 @@ def main():
     # ------------------------------------------------ 1. retencao por etapa
     resumo = achar(args.outdir, "overall_summary.tsv")
     if not resumo:
-        sys.exit("Nao achei overall_summary.tsv em %s" % args.outdir)
+        sys.exit("overall_summary.tsv not found in %s" % args.outdir)
     linhas = ler_tsv(resumo)
     campos = list(linhas[0].keys())
     c_amostra = coluna(campos, "sample", "sampleID", "ID")
     passos = etapas(linhas)
 
-    print("== 1. Retencao por etapa (mediana entre %d amostras) ============"
+    print("== 1. Retention per step (median across %d samples) ============"
           % len(linhas))
     print("%-16s %12s %10s %10s" % ("ETAPA", "MEDIANA", "% ENTRADA", "% ETAPA ANT"))
     print("-" * 52)
@@ -145,20 +145,20 @@ def main():
                     ruins.append((l.get(c_amostra), pct))
         print()
         if ruins:
-            print("  %d amostra(s) com fusao abaixo de %.0f%%:"
+            print("  %d sample(s) merging below %.0f%%:"
                   % (len(ruins), args.min_merge))
             for a, p in sorted(ruins, key=lambda x: x[1])[:12]:
                 print("     %-28s %.1f%%" % (a, p))
-            print("  Fusao baixa = sobreposicao insuficiente: reveja truncLen")
-            print("  ou o comprimento do inserto assumido para esta regiao.")
+            print("  Low merging = insufficient overlap: revisit truncLen")
+            print("  or the insert length assumed for this region.")
         else:
-            print("  Todas as amostras acima de %.0f%% de fusao." % args.min_merge)
+            print("  All samples above %.0f%% merging." % args.min_merge)
 
     # ------------------------------------------- 1b. comparacao entre execucoes
-    if args.comparar:
-        outro = achar(args.comparar, "overall_summary.tsv")
+    if args.compare:
+        outro = achar(args.compare, "overall_summary.tsv")
         if not outro:
-            print("\n  (nao achei overall_summary.tsv em %s)" % args.comparar)
+            print("\n  (overall_summary.tsv not found in %s)" % args.compare)
         else:
             lb = ler_tsv(outro)
             cb = list(lb[0].keys())
@@ -176,9 +176,9 @@ def main():
             A = taxa(linhas, c_amostra, c_in, c_merge)
             B = taxa(lb, ca_b, pb.get("entrada"), pb.get("merged"))
             comuns = sorted(set(A) & set(B))
-            print("\n== 1b. Fusao: esta execucao x %s ==============" % args.comparar)
+            print("\n== 1b. Merging: this run vs %s ==============" % args.compare)
             if not comuns:
-                print("  Nenhuma amostra em comum.")
+                print("  No samples in common.")
             else:
                 print("  %-28s %8s %8s %8s" % ("AMOSTRA", "ATUAL", "OUTRA", "DELTA"))
                 deltas = []
@@ -191,9 +191,9 @@ def main():
                 if med > 3:
                     print("  A outra execucao funde melhor — adote os parametros dela.")
                 elif med < -3:
-                    print("  Esta execucao funde melhor — mantenha os parametros atuais.")
+                    print("  This run merges better — keep the current parameters.")
                 else:
-                    print("  Empate tecnico: o parametro nao e a causa da perda.")
+                    print("  Technical tie: the parameter is not the cause of the loss.")
 
     # ------------------------------------------- 2. classificacao por nivel
     tax = achar(args.outdir, "ASV_tax_species*.tsv", "ASV_tax*.tsv", "*tax*species*.tsv")
@@ -208,7 +208,7 @@ def main():
                     if l.get(r) and l[r].strip() not in ("", "NA", "NA_NA", "unclassified"))
             print("  %-9s %6d  %5.1f%%" % (r, n, 100.0 * n / len(tl)))
     else:
-        print("\n== 2. Classificacao: tabela de taxonomia nao encontrada")
+        print("\n== 2. Classification: taxonomy table not found")
 
     # -------------------------------------- 3. construto do Smart Control
     tabela = achar(args.outdir, "ASV_table.tsv", "feature-table.tsv", "ASV_table*.tsv")
@@ -216,15 +216,15 @@ def main():
         tl = ler_tsv(tabela)
         campos = list(tl[0].keys())
         c_id = campos[0]
-        padrao = re.compile(args.controles)
+        padrao = re.compile(args.controls)
         ctrl = [c for c in campos[1:] if padrao.search(c)]
         amostras = [c for c in campos[1:] if c not in ctrl]
         print("\n== 3. Smart Control: construto e carryover =====================")
         if not ctrl:
-            print("  Nenhuma coluna casou com '%s' — controles nao entraram nesta execucao."
-                  % args.controles)
+            print("  No column matched '%s' — controls were not part of this run."
+                  % args.controls)
         else:
-            print("  Controles: %s" % ", ".join(ctrl))
+            print("  Controls: %s" % ", ".join(ctrl))
             tot_ctrl = {c: sum(num(l.get(c)) or 0 for l in tl) for c in ctrl}
             ranking = []
             for l in tl:
@@ -238,8 +238,8 @@ def main():
                 nas = sum(num(l.get(c)) or 0 for c in amostras)
                 print("  %-14s %12.0f %9.1f%% %14.0f"
                       % (ident[:14], soma, 100.0 * soma / base, nas))
-            print("\n  O primeiro da lista e o construto sintetico. Remova-o das")
-            print("  amostras antes de qualquer analise; o que sobra nos controles")
+            print("\n  The first one listed is the synthetic construct. Remove it from")
+            print("  the samples before any analysis; whatever remains in the controls")
             print("  e contaminacao de reagente ou ambiente.")
 
     # ------------------------------- 4. cloroplasto e mitocondria
@@ -268,7 +268,7 @@ def main():
                 removivel += soma
 
         print("\n== 4. Cloroplasto e mitocondria ================================")
-        print("  ASVs marcados : %d de %d" % (len(marcados), len(tl_tax)))
+        print("  ASVs flagged  : %d of %d" % (len(marcados), len(tl_tax)))
         print("  Reads neles   : %.0f de %.0f (%.2f%%)"
               % (removivel, total, 100.0 * removivel / total if total else 0))
         c_in_tf = coluna(list(linhas[0].keys()), "input_tax_filter")
@@ -281,14 +281,14 @@ def main():
             # fica em qiime2/. Entao encontrar os ASVs marcados aqui e normal.
             # O que diz se o filtro atuou e a diferenca input/filtered_tax_filter.
             if marcados and ent == sai:
-                print("  >>> O filtro do pipeline NAO atuou. Remova esses ASVs")
+                print("  >>> The pipeline filter did NOT act. Remove these ASVs")
                 print("      no downstream e reporte a fracao removida.")
             elif marcados and abs((ent - sai) - removivel) <= max(5, 0.02 * removivel):
                 print("  Consistente: o filtro removeu exatamente esses ASVs.")
                 print("  (a tabela do dada2/ e a de antes do filtro; use a de qiime2/)")
 
     # ------------------------------------------------------- onde olhar
-    print("\n== Arquivos ====================================================")
+    print("\n== Files =======================================================")
     for nome in ("summary_report.html", "overall_summary.tsv",
                  "ASV_table*.tsv", "ASV_tax*.tsv"):
         p = achar(args.outdir, nome)

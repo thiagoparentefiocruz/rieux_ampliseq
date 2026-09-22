@@ -83,27 +83,27 @@ def indexar_disco(raiz):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("planilha")
-    ap.add_argument("brutos")
-    ap.add_argument("saida")
-    ap.add_argument("--executar", action="store_true",
-                    help="cria de fato os links/copias (padrao: so relata)")
-    ap.add_argument("--copiar", action="store_true",
-                    help="copia os arquivos em vez de criar symlinks")
+    ap.add_argument("sample_table")
+    ap.add_argument("raw_dir")
+    ap.add_argument("out_dir")
+    ap.add_argument("--apply", action="store_true",
+                    help="actually create the links/copies (default: report only)")
+    ap.add_argument("--copy", action="store_true",
+                    help="copy the files instead of creating symlinks")
     ap.add_argument("--controls", default="^Smart",
-                    help="regex das amostras em disco que sao controles. Elas "
+                    help="regex of on-disk samples that are controls. They "
                          "nao estao na planilha e sao linkadas em TODAS as "
                          "pastas, marcadas na coluna 'controle'. Passe uma "
                          "string vazia para nao incluir nenhuma.")
     args = ap.parse_args()
 
-    with open(args.planilha, encoding="utf-8-sig") as fh:
+    with open(args.sample_table, encoding="utf-8-sig") as fh:
         linhas = list(csv.DictReader(fh))
     cols = list(linhas[0].keys())
     C_DONO, C_ORIG, C_SEQ = cols[0], cols[1], cols[2]
 
-    disco = indexar_disco(args.brutos)
-    print("Planilha: %d linhas | Em disco: %d amostras com par R1/R2\n"
+    disco = indexar_disco(args.raw_dir)
+    print("Sample table: %d rows | On disk: %d samples with an R1/R2 pair\n"
           % (len(linhas), len(disco)))
 
     # ---------------------------------------------------------- cruzamento
@@ -127,8 +127,8 @@ def main():
     # sitio para os 7 pares de primers, entao valida o split; e o ASV dele
     # identifica o carryover que aparece nas amostras reais.
     controles = []
-    if args.controles:
-        padrao = re.compile(args.controles)
+    if args.controls:
+        padrao = re.compile(args.controls)
         controles = sorted(s for s in em_disco_sem_planilha if padrao.search(s))
 
     # ---------------------------------------------------------- relatorio
@@ -148,14 +148,14 @@ def main():
                  alerta))
 
     if em_disco_sem_planilha:
-        print("\nEm disco sem entrada na planilha: %s"
+        print("\nOn disk with no row in the sample table: %s"
               % ", ".join(em_disco_sem_planilha))
     if controles:
-        print("Tratados como controle (entram em todas as pastas): %s"
+        print("Treated as controls (they go into every folder): %s"
               % ", ".join(controles))
         ignorados = [s for s in em_disco_sem_planilha if s not in controles]
         if ignorados:
-            print("Ignorados (nem amostra nem controle): %s" % ", ".join(ignorados))
+            print("Ignored (neither sample nor control): %s" % ", ".join(ignorados))
 
     # ------------------------------------------- replicatas (ID repetido)
     print("\n== Candidatos a replicata ======================================")
@@ -178,9 +178,9 @@ def main():
     # ---------------------------------------------------------- execucao
     print("\n== Saida =======================================================")
     for dono, itens in sorted(por_dono.items()):
-        destino = os.path.join(args.saida, dono, "dados_brutos")
-        meta = os.path.join(args.saida, dono, "metadata.tsv")
-        if args.executar:
+        destino = os.path.join(args.out_dir, dono, "dados_brutos")
+        meta = os.path.join(args.out_dir, dono, "metadata.tsv")
+        if args.apply:
             os.makedirs(destino, exist_ok=True)
 
         usados = Counter()
@@ -196,11 +196,11 @@ def main():
             r1, r2 = disco[seq]
             for origem, sufixo in ((r1, "R1"), (r2, "R2")):
                 alvo = os.path.join(destino, "%s_%s.fastq.gz" % (base, sufixo))
-                if not args.executar:
+                if not args.apply:
                     continue
                 if os.path.lexists(alvo):
                     os.remove(alvo)
-                if args.copiar:
+                if args.copy:
                     shutil.copy2(origem, alvo)
                 else:
                     os.symlink(os.path.abspath(origem), alvo)
@@ -212,17 +212,17 @@ def main():
                                 os.path.abspath(os.path.join(destino, base + "_R1.fastq.gz")),
                                 os.path.abspath(os.path.join(destino, base + "_R2.fastq.gz"))])
 
-        if args.executar:
+        if args.apply:
             with open(meta, "w") as fh:
                 fh.write("sample\tseq_id\toriginal_id\tproject"
                          "\tgroup\treplicate\tcontrol\tfastq_1\tfastq_2\n")
                 for l in linhas_meta:
                     fh.write("\t".join(l) + "\n")
-        print("  %-10s %3d amostras + %d controle(s) -> %s"
+        print("  %-10s %3d samples + %d control(s) -> %s"
               % (dono, len(itens), len(controles), destino))
 
-    if not args.executar:
-        print("\n(nada foi criado — repita com --executar)")
+    if not args.apply:
+        print("\n(nothing was created — repeat with --apply)")
 
 
 if __name__ == "__main__":

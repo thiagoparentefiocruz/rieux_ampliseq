@@ -46,8 +46,8 @@
 
 set -euo pipefail
 
-BRUTOS="${1:?informe o diretorio dos dados brutos}"
-TABELA="${2:?informe o primers_panel.tsv}"
+BRUTOS="${1:?give the raw data directory}"
+TABELA="${2:?give the primers_panel.tsv}"
 SAIDA="${3:-split_saida}"
 
 THREADS="${SLURM_CPUS_PER_TASK:-4}"
@@ -77,11 +77,11 @@ elif [[ -n "$IMG" ]]; then
     done
     BINDS=()
     for r in "${!RAIZES[@]}"; do BINDS+=(-B "$r"); done
-    echo "  binds do singularity: ${!RAIZES[*]}"
+    echo "  singularity binds: ${!RAIZES[*]}"
     CUTADAPT=(singularity exec "${BINDS[@]}" "$IMG" cutadapt)
 else
-    echo "ERRO: nem cutadapt no PATH nem imagem no cache ($CACHE)." >&2
-    echo "Imagens disponiveis:" >&2
+    echo "ERROR: no cutadapt on PATH and no image in the cache ($CACHE)." >&2
+    echo "Available images:" >&2
     find "$CACHE" \( -name '*.img' -o -name '*.sif' \) -printf '  %f\n' 2>/dev/null | head -20 >&2
     exit 1
 fi
@@ -108,7 +108,7 @@ awk -F'\t' '!/^#/ && !/^regiao\t/ && NF>=3 {
      }' "$TABELA" > "$TMP/regioes.txt"
 
 mapfile -t REGIOES < "$TMP/regioes.txt"
-[[ ${#REGIOES[@]} -gt 0 ]] || { echo "ERRO: nenhuma regiao lida de $TABELA" >&2; exit 1; }
+[[ ${#REGIOES[@]} -gt 0 ]] || { echo "ERROR: no region read from $TABELA" >&2; exit 1; }
 for r in "${REGIOES[@]}" unknown; do mkdir -p "$SAIDA/split/$r"; done
 
 # --------------------------------------------------- amostras desta tarefa
@@ -123,7 +123,7 @@ TOTAL=${#R1S[@]}
 NTAREFAS=$(( (TOTAL + LOTE - 1) / LOTE ))
 
 if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
-    echo "$TOTAL amostras, LOTE=$LOTE  ->  submeta com --array=1-$NTAREFAS"
+    echo "$TOTAL samples, LOTE=$LOTE  ->  submit with --array=1-$NTAREFAS"
     echo "  sbatch --array=1-$NTAREFAS%10 $0 $BRUTOS $TABELA $SAIDA"
     exit 0
 fi
@@ -131,9 +131,9 @@ fi
 INICIO=$(( (IDX - 1) * LOTE ))
 FIM=$(( INICIO + LOTE - 1 ))
 (( FIM >= TOTAL )) && FIM=$(( TOTAL - 1 ))
-(( INICIO >= TOTAL )) && { echo "tarefa $IDX nao tem amostras"; exit 0; }
+(( INICIO >= TOTAL )) && { echo "task $IDX has no samples"; exit 0; }
 
-echo "tarefa $IDX/$NTAREFAS: amostras $((INICIO+1)) a $((FIM+1)) de $TOTAL"
+echo "task $IDX/$NTAREFAS: samples $((INICIO+1)) to $((FIM+1)) of $TOTAL"
 
 # -------------------------------------------------------------- executa
 # -e 0.15   ~3 erros num primer de 20 nt, folga para a degenerescencia
@@ -146,13 +146,13 @@ for (( k = INICIO; k <= FIM; k++ )); do
     JSON="$SAIDA/relatorios/${AMOSTRA}.cutadapt.json"
 
     if [[ ! -f "$R2" ]]; then
-        echo "  AVISO: $AMOSTRA sem par R2 — pulando" >&2
+        echo "  WARNING: $AMOSTRA has no R2 mate — skipping" >&2
         continue
     fi
     # idempotente: reexecutar depois de uma falha parcial nao refaz o que ja
     # terminou. Apague o JSON da amostra para forcar o reprocessamento.
     if [[ -s "$JSON" ]]; then
-        echo "  $AMOSTRA ja processada — pulando"
+        echo "  $AMOSTRA already processed — skipping"
         continue
     fi
 

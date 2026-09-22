@@ -343,55 +343,54 @@ def regioes_em(dirbase, variantes=False, painel=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--resultados", help="diretorio com uma subpasta por regiao")
-    ap.add_argument("--nome", default=None, help="rotulo do conjunto")
-    ap.add_argument("--raiz", default=None,
-                    help="alternativa: <raiz>/resultados/<nome>/<REGIAO>/")
-    ap.add_argument("--out", default=None, help="diretorio de saida")
-    ap.add_argument("--regioes", nargs="*", default=None)
+    ap.add_argument("--results", help="directory with one subfolder per region")
+    ap.add_argument("--name", default=None, help="project label")
+    ap.add_argument("--root", default=None,
+                    help="alternative layout: <root>/resultados/<name>/<REGION>/")
+    ap.add_argument("--out", default=None, help="output directory")
+    ap.add_argument("--regions", nargs="*", default=None)
     ap.add_argument("--primers", default=None,
-                    help="tabela de primers; a primeira coluna e a lista "
-                         "autoritativa de regioes do painel")
+                    help="primers table; its first column is the authoritative list of "
+                         "the panel regions")
     ap.add_argument("--controls", default=PADRAO_CONTROLE,
-                    help="regex dos nomes de amostra que sao controle "
-                         "(padrao: %(default)s)")
-    ap.add_argument("--com-variantes", action="store_true",
-                    help="inclui execucoes de diagnostico (V1V2_t160_ruim etc.)")
+                    help="regex of sample names that are controls (default: %(default)s)")
+    ap.add_argument("--with-variants", action="store_true",
+                    help="include diagnostic runs (V1V2_t160_ruim and the like)")
     ap.add_argument("--min-reads", type=int, default=1)
-    ap.add_argument("--foco", default=None,
-                    help="regex; imprime o detalhe por amostra dos taxons que casarem")
+    ap.add_argument("--focus", default=None,
+                    help="regex; print the per-sample detail of matching taxa")
     args = ap.parse_args()
 
     # --- que conjuntos processar: [(nome, dir)]
     conjuntos = []
-    if args.resultados:
-        nome = args.nome or os.path.basename(os.path.normpath(args.resultados))
-        conjuntos.append((nome, args.resultados))
-        saida_padrao = os.path.join(args.resultados, "final_reports")
-    elif args.raiz:
-        base = os.path.join(args.raiz, "resultados")
+    if args.results:
+        nome = args.name or os.path.basename(os.path.normpath(args.results))
+        conjuntos.append((nome, args.results))
+        saida_padrao = os.path.join(args.results, "final_reports")
+    elif args.root:
+        base = os.path.join(args.root, "resultados")
         if not os.path.isdir(base):
-            sys.exit("ERRO: nao achei %s" % base)
+            sys.exit("ERROR: %s not found" % base)
         for d in sorted(os.listdir(base)):
             if os.path.isdir(os.path.join(base, d)):
                 conjuntos.append((d, os.path.join(base, d)))
-        saida_padrao = os.path.join(args.raiz, "final_reports")
+        saida_padrao = os.path.join(args.root, "final_reports")
     else:
-        sys.exit("ERRO: informe --resultados ou --raiz")
+        sys.exit("ERROR: give --results or --root")
 
     out = args.out or saida_padrao
-    rx = re.compile(args.foco, re.I) if args.foco else None
+    rx = re.compile(args.focus, re.I) if args.focus else None
 
     global _rx_controle
-    _rx_controle = re.compile(args.controles)
+    _rx_controle = re.compile(args.controls)
     painel = nomes_do_painel(args.primers)
 
     s_ret, s_cls, s_abd, s_len, s_amo, s_prev = [], [], [], [], [], []
     focos = []
 
     for nome, dirbase in conjuntos:
-        regs = args.regioes if args.regioes else regioes_em(
-            dirbase, args.com_variantes, painel)
+        regs = args.regions if args.regions else regioes_em(
+            dirbase, args.with_variants, painel)
         for regiao in regs:
             d = os.path.join(dirbase, regiao)
             if not os.path.isdir(d):
@@ -400,8 +399,8 @@ def main():
             n2 = taxonomia(d, nome, regiao, s_cls, s_abd, s_amo, s_prev,
                            args.min_reads, rx, focos)
             comprimento(d, nome, regiao, s_len)
-            marca = "" if n2 else "   (sem taxonomia — execucao incompleta)"
-            print("  %-12s %-12s %3d amostras  %5d ASVs%s"
+            marca = "" if n2 else "   (no taxonomy — incomplete run)"
+            print("  %-12s %-12s %3d samples  %5d ASVs%s"
                   % (nome, regiao, n1, n2, marca))
 
     os.makedirs(out, exist_ok=True)
@@ -412,9 +411,9 @@ def main():
             fh.write("\t".join(cabecalho) + "\n")
             for l in linhas:
                 fh.write("\t".join(l) + "\n")
-        print("  %-30s %8d linhas" % (arquivo, len(linhas)))
+        print("  %-30s %8d rows" % (arquivo, len(linhas)))
 
-    print("\nGravando em %s/" % out)
+    print("\nWriting to %s/" % out)
     gravar("reads_per_region.tsv",
            ["project", "region", "sample", "control", "input", "filtered",
             "denoisedF", "denoisedR", "merged", "nonchim"], s_ret)
@@ -435,20 +434,20 @@ def main():
 
     if rx:
         print("\n" + "=" * 74)
-        print("FOCO: /%s/" % args.foco)
+        print("FOCO: /%s/" % args.focus)
         print("=" * 74)
         if not focos:
-            print("  nenhum taxon casou com o padrao.")
+            print("  no taxon matched the pattern.")
         for nome, regiao, r, taxon, n_pres, n_total, n_ct, det in focos:
             print("\n%s · %s · %s · %s" % (nome, regiao, r, taxon))
-            print("  em %d de %d amostras (%.0f%%)%s"
+            print("  in %d of %d samples (%.0f%%)%s"
                   % (n_pres, n_total, 100.0 * n_pres / n_total if n_total else 0.0,
-                     "" if not n_ct else "  ·  %d controles na corrida" % n_ct))
+                     "" if not n_ct else "  ·  %d controls in the run" % n_ct))
             for amostra, c, v, p in sorted(det, key=lambda x: -x[3]):
                 print("    %-24s %10.0f reads  %7.2f%%%s"
-                      % (amostra, v, p, "   <-- CONTROLE" if c else ""))
+                      % (amostra, v, p, "   <-- CONTROL" if c else ""))
 
-    print("\nNo R:  dados <- aspp::read_ampliseq_summary('%s')" % out)
+    print("\nIn R:  data <- aspp::read_ampliseq_summary('%s')" % out)
 
 
 if __name__ == "__main__":

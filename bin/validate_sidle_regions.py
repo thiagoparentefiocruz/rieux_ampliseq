@@ -252,20 +252,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--primers", default=padrao_primers)
     ap.add_argument("--ref", required=True,
-                    help="fasta do banco de referencia (pode ser .gz)")
+                    help="reference database FASTA (.gz is fine)")
     ap.add_argument("--asv", default=None,
                     help="metricas/asv_length.tsv (opcional, mas e' a "
                          "metade que valida)")
     ap.add_argument("--out", default="regions_multiregion.tsv")
     ap.add_argument("--n", type=int, default=20000)
-    ap.add_argument("--erros", type=int, default=1, choices=[0, 1, 2])
-    ap.add_argument("--perda", type=float, default=5.0,
-                    help="%% de ASV que se aceita descartar no corte")
-    ap.add_argument("--colab", default=None)
-    ap.add_argument("--sidle-regioes", default=None,
-                    help="grava no regions_multiregion.tsv apenas estas regioes "
-                         "(separadas por virgula). Util quando uma regiao tem "
-                         "cobertura ruim no banco e derruba a intersecao.")
+    ap.add_argument("--errors", type=int, default=1, choices=[0, 1, 2])
+    ap.add_argument("--loss", type=float, default=5.0,
+                    help="%% of ASVs you accept losing to the cut")
+    ap.add_argument("--project", default=None)
+    ap.add_argument("--sidle-regions", default=None,
+                    help="write only these regions (comma separated) to "
+                         "regions_multiregion.tsv. Useful when one region has "
+                         "poor database coverage and drags the intersection down.")
     ap.add_argument("--min-amplicon", type=int, default=80)
     ap.add_argument("--max-amplicon", type=int, default=1200)
     args = ap.parse_args()
@@ -273,28 +273,28 @@ def main():
     regioes = ler_primers(args.primers)
     nomes = set(r[0] for r in regioes)
 
-    print("Amostrando o banco: %s" % args.ref)
+    print("Sampling the database: %s" % args.ref)
     refs, total = amostrar_fasta(args.ref, args.n)
-    print("  %d sequencias no banco, %d amostradas\n" % (total, len(refs)))
+    print("  %d sequences in the database, %d sampled\n" % (total, len(refs)))
 
     obs = {}
     if args.asv and os.path.isfile(args.asv):
-        obs = ler_observado(args.asv, args.colab, nomes)
+        obs = ler_observado(args.asv, args.project, nomes)
     elif args.asv:
-        print("AVISO: nao achei %s — sem a metade observada, o script so "
-              "descreve a referencia e nao valida nada.\n" % args.asv)
+        print("WARNING: %s not found — without the observed half, this script "
+              "only describes the reference and validates nothing.\n" % args.asv)
 
     linhas_saida = []
     recuperados = {}
     print("%-6s %6s   %-26s %-26s  %s" %
-          ("regiao", "recup", "referencia (in silico)", "ASVs observados",
-           "diagnostico"))
+          ("region", "recov", "reference (in silico)", "observed ASVs",
+           "diagnosis"))
     print("-" * 104)
 
     for regiao, fw, rv in regioes:
         rv_busca = revcomp(rv)
-        rx_f = regex_primer(fw, args.erros, "fim")
-        rx_r = regex_primer(rv_busca, args.erros, "inicio")
+        rx_f = regex_primer(fw, args.errors, "fim")
+        rx_r = regex_primer(rv_busca, args.errors, "inicio")
 
         hist_ref = defaultdict(int)
         achados = 0
@@ -360,30 +360,30 @@ def main():
             # esperado: o banco e' 16S, o ITS nao esta la. Nao e' defeito do
             # primer, e sinalizar como defeito mandaria caçar problema que nao
             # existe.
-            diag.append("fora do escopo (banco 16S)")
+            diag.append("out of scope (16S database)")
         if hist_ref and hist_obs:
             d5 = percentil(hist_obs, 5) - percentil(hist_ref, 5)
             d95 = percentil(hist_obs, 95) - percentil(hist_ref, 95)
             if abs(d5) <= 8 and abs(d95) <= 8:
-                diag.append("bordas batem")
+                diag.append("boundaries match")
             elif abs(d5 - d95) <= 8:
-                diag.append("DESLOCAMENTO de %+d nt" % ((d5 + d95) // 2))
+                diag.append("SHIFT of %+d nt" % ((d5 + d95) // 2))
             else:
-                diag.append("pontas discordam (%+d / %+d nt)" % (d5, d95))
+                diag.append("tails disagree (%+d / %+d nt)" % (d5, d95))
         elif not hist_obs:
-            diag.append("sem ASV observado")
+            diag.append("no observed ASV")
 
         # ---- escolha do region_length
         # O Sidle corta em region_length e DESCARTA o que for mais curto. Entao
         # o corte tem que caber tanto nos ASVs quanto na referencia: quem manda
         # e' o menor dos dois percentis.
         if hist_obs and hist_ref:
-            alvo = min(percentil(hist_obs, args.perda),
-                       percentil(hist_ref, args.perda))
+            alvo = min(percentil(hist_obs, args.loss),
+                       percentil(hist_ref, args.loss))
         elif hist_ref:
-            alvo = percentil(hist_ref, args.perda)
+            alvo = percentil(hist_ref, args.loss)
         elif hist_obs:
-            alvo = percentil(hist_obs, args.perda)
+            alvo = percentil(hist_obs, args.loss)
         else:
             alvo = 0
 
@@ -395,7 +395,7 @@ def main():
                  "; ".join(diag)))
         if alvo:
             print("%-6s %s region_length = %d  "
-                  "(mantem %.1f%% dos ASVs, %.1f%% da referencia)"
+                  "(keeps %.1f%% of ASVs, %.1f%% of the reference)"
                   % ("", " " * 5, alvo, acima_de(hist_obs, alvo),
                      acima_de(hist_ref, alvo)))
 
@@ -406,8 +406,8 @@ def main():
         # valido, ai sim a suspeita e das bordas.
         if recup < 60 and not regiao.startswith("ITS"):
             n = len(refs)
-            print("%11s sem forward: %.0f%%   sem reverse: %.0f%%   "
-                  "par fora da faixa: %.0f%%"
+            print("%11s no forward: %.0f%%   no reverse: %.0f%%   "
+                  "pair out of range: %.0f%%"
                   % ("", 100.0 * sem_fw / n, 100.0 * sem_rv / n,
                      100.0 * sem_par / n))
 
@@ -422,8 +422,8 @@ def main():
     # --sidle-regioes para obter o segundo, o que recomputava as 452 mil
     # sequencias inteiras para trocar quatro linhas de um TSV. Era desperdicio,
     # e pior, escondia que a escolha entre os dois e' o resultado do script.
-    so_estas = set(r.strip() for r in args.sidle_regioes.split(",")) \
-        if args.sidle_regioes else None
+    so_estas = set(r.strip() for r in args.sidle_regions.split(",")) \
+        if args.sidle_regions else None
 
     def gravar_regioes(caminho, filtro):
         pasta = os.path.dirname(os.path.abspath(caminho))
@@ -442,7 +442,7 @@ def main():
         return n
 
     n = gravar_regioes(args.out, so_estas)
-    print("\nGravado %s com %d regioes (ITS excluido: o Sidle e' 16S)." %
+    print("\nWrote %s with %d regions (ITS excluded: Sidle is 16S)." %
           (args.out, n))
 
     # ---- quantas referencias servem para o Sidle
@@ -455,19 +455,19 @@ def main():
     if regs16:
         total_am = len(refs)
         todas = set.intersection(*[recuperados[r] for r in regs16])
-        print("\nCobertura do banco para o Sidle (de %d referencias amostradas):"
+        print("\nDatabase coverage for Sidle (out of %d sampled references):"
               % total_am)
         for k in range(len(regs16), 0, -1):
             quantas = sum(1 for i in range(total_am)
                           if sum(1 for r in regs16 if i in recuperados[r]) >= k)
-            marca = "  <- servem as %d regioes" % len(regs16) if k == len(regs16) else ""
-            print("  em >= %d regioes: %6d (%5.1f%%)%s"
+            marca = "  <- serve all %d regions" % len(regs16) if k == len(regs16) else ""
+            print("  in >= %d regions: %6d (%5.1f%%)%s"
                   % (k, quantas, 100.0 * quantas / total_am, marca))
         if 100.0 * len(todas) / total_am < 25:
-            print("\n  ATENCAO: poucas referencias cobrem as seis regioes. O Sidle")
-            print("  reconstroi a partir do banco, entao isso limita o que ele pode")
-            print("  resolver — e e' motivo para manter o ramo por regiao como")
-            print("  denominador, nao como alternativa.")
+            print("\n  WARNING: few references cover all six regions. Sidle")
+            print("  reconstructs from the database, so this caps what it can")
+            print("  resolve — and it is a reason to keep the per-region branch as")
+            print("  the denominator, not as an alternative.")
 
         # ---- qual COMBINACAO de regioes rende mais
         #
@@ -479,7 +479,7 @@ def main():
         #
         # Sao 57 combinacoes de 2 a 6 regioes; enumerar todas custa nada e evita
         # escolher por intuicao.
-        print("\nMelhor combinacao por numero de regioes:")
+        print("\nBest combination for each number of regions:")
         melhor_por_k = []
         for k in range(2, len(regs16) + 1):
             melhor = None
@@ -488,7 +488,7 @@ def main():
                 if melhor is None or len(inter) > melhor[0]:
                     melhor = (len(inter), combo)
             melhor_por_k.append((k, melhor[0], melhor[1]))
-            print("  %d regioes: %6d (%5.1f%%)   %s"
+            print("  %d regions: %6d (%5.1f%%)   %s"
                   % (k, melhor[0], 100.0 * melhor[0] / total_am,
                      " ".join(melhor[1])))
 
@@ -504,35 +504,35 @@ def main():
             raiz, ext = os.path.splitext(args.out)
             alt = raiz + "_sugerido" + (ext or ".tsv")
             n_alt = gravar_regioes(alt, set(combo))
-            print("\n  Maior conjunto que ainda cobre metade do banco: %s"
+            print("\n  Largest set still covering half the database: %s"
                   % " ".join(combo))
-            print("  (%d referencias, %.1f%% — contra %.1f%% com as %d regioes)"
+            print("  (%d references, %.1f%% — against %.1f%% with all %d regions)"
                   % (n_ref, 100.0 * n_ref / total_am,
                      100.0 * len(todas) / total_am, len(regs16)))
-            print("  Gravado %s com %d regioes." % (alt, n_alt))
+            print("  Wrote %s with %d regions." % (alt, n_alt))
             print()
-            print("  Os dois arquivos existem de proposito: qual usar e' uma")
-            print("  questao empirica, nao de preferencia. Rodar os dois e")
-            print("  comparar quanto do dado sobrevive a reconstrucao e a unica")
-            print("  forma de saber — a documentacao do Sidle nao diz o que")
-            print("  acontece com uma referencia ausente de uma das regioes.")
-    print("\nComo ler isto:")
-    print("  A coluna 'recup' e' quantas referencias contem a regiao — nao e'")
-    print("  medida de qualidade do primer. As entradas do SILVA sao truncadas")
-    print("  nas pontas, entao as regioes terminais recuperam menos por construcao.")
-    print("  A linha 'sem forward / sem reverse' separa as duas causas: falta do")
-    print("  primer de um lado so = entrada truncada; par fora da faixa = borda")
-    print("  suspeita.")
+            print("  Both files exist on purpose: which one to use is an")
+            print("  empirical question, not a preference. Running both and")
+            print("  comparing how much data survives reconstruction is the only")
+            print("  way to know — the Sidle docs do not say what happens to a")
+            print("  reference that is absent from one of the regions.")
+    print("\nHow to read this:")
+    print("  The 'recov' column is how many references CONTAIN the region — it")
+    print("  is not a measure of primer quality. SILVA entries are truncated at")
+    print("  both ends, so terminal regions recover less by construction.")
+    print("  The 'no forward / no reverse' line separates the two causes: a")
+    print("  primer missing on one side only = truncated entry; pair out of range")
+    print("  = suspect boundary.")
     print()
-    print("  O diagnostico compara as PONTAS (p5 e p95) das duas distribuicoes,")
-    print("  nao as medianas: referencia e amostra nao tem a mesma composicao, e")
-    print("  duas medianas podem divergir 20 nt com as bordas perfeitamente certas.")
-    print("    'bordas batem'      -> primer e recorte corretos; pode seguir.")
-    print("    'DESLOCAMENTO'      -> a distribuicao inteira esta movida; o numero")
-    print("                           diz de quantas bases e para que lado.")
-    print("    'pontas discordam'  -> as duas pontas se movem de forma diferente;")
-    print("                           nao e' deslocamento de borda, e sim corte —")
-    print("                           veja se o truncLen esta limitando o merge.")
+    print("  The diagnosis compares the TAILS (p5 and p95) of the two length")
+    print("  distributions, not the medians: reference and sample do not share a")
+    print("  composition, so medians can differ by 20 nt with correct boundaries.")
+    print("    'boundaries match' -> primer and trimming are right; go ahead.")
+    print("    'SHIFT'            -> the whole distribution is displaced; the")
+    print("                          number says by how many bases, and which way.")
+    print("    'tails disagree'   -> the two tails move differently; that is not")
+    print("                          a boundary shift but a cut — check whether")
+    print("                          truncLen is capping the merge.")
 
 
 if __name__ == "__main__":
