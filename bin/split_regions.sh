@@ -117,7 +117,11 @@ trap 'rm -rf "$TMP"' EXIT
 F_FA="$TMP/forward.fasta"
 R_FA="$TMP/reverse.fasta"
 
-awk -F'\t' '!/^#/ && !/^regiao\t/ && NF>=3 {
+# As DUAS grafias do cabecalho. A coluna passou a se chamar 'region' na
+# traducao para ingles e este filtro ficou com 'regiao': a linha de cabecalho
+# entrava como se fosse uma regiao, com o primer 'forward'. O cutadapt recusa
+# 'forward' como adaptador — nao e IUPAC — e aborta na primeira amostra.
+awk -F'\t' '!/^#/ && !/^region\t/ && !/^regiao\t/ && NF>=3 {
         print ">"$1"\n"$2 > "'"$F_FA"'"
         print ">"$1"\n"$3 > "'"$R_FA"'"
         print $1
@@ -206,7 +210,16 @@ for (( k = INICIO; k <= FIM; k++ )); do
         -o "$SAIDA/split/{name}/${AMOSTRA}_R1.fastq.gz" \
         -p "$SAIDA/split/{name}/${AMOSTRA}_R2.fastq.gz" \
         --json "$JSON" \
-        "$R1" "$R2" > /dev/null
+        "$R1" "$R2" > "$TMP/cutadapt.out" 2>&1 || {
+            # O relatorio do cutadapt vai para stdout, e as mensagens de erro
+            # dele tambem. Mandar stdout para /dev/null calava justamente a
+            # linha que dizia o que houve: a execucao morria sem uma palavra,
+            # dentro e fora do SLURM. Agora o relatorio so aparece quando ha
+            # falha, que e quando ele interessa.
+            echo "  ERROR on $AMOSTRA — cutadapt said:" >&2
+            sed 's/^/    /' "$TMP/cutadapt.out" >&2
+            exit 1
+        }
 done
 
 echo "tarefa $IDX concluida"
