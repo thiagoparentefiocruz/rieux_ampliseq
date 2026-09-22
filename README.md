@@ -146,6 +146,7 @@ fat partition — with SILVA they are the only genuinely memory-hungry step.
 | `split_regioes.sh` | routes raw reads into per-region samplesheets |
 | `discover_primers.py` | recovers the panel's primers from the FASTQs |
 | `validar_regioes_sidle.py` | in-silico PCR; writes `regions_multiregion.tsv` |
+| `fazer_samplesheet.py` | builds the undivided-reads samplesheet for the Sidle branch |
 | `preparar_unite.py` | formats UNITE into the two FASTA files DADA2 needs |
 | `coletar_metricas.py` | builds `final_reports/` |
 | `avaliar_execucao.py` | per-run QC report |
