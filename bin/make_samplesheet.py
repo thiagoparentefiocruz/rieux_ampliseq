@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fazer_samplesheet.py — samplesheet do ampliseq a partir do metadata.tsv
+make_samplesheet.py — samplesheet do ampliseq a partir do metadata.tsv
 
 Para que serve
 --------------
@@ -9,7 +9,7 @@ nao: ele recebe as reads INTEIRAS e faz o proprio roteamento, rodando cutadapt
 uma vez por regiao com os primers do regions_multiregion.tsv. Alimentar o Sidle
 com as reads ja divididas cortaria primer duas vezes e deslocaria as bordas.
 
-O metadata.tsv que o organizar_colaboradores.py grava ja tem o que falta:
+O metadata.tsv que o organize_project.py grava ja tem o que falta:
 `sample`, `fastq_1` e `fastq_2` apontando para as reads nao divididas. Este
 script so projeta essas colunas no formato do ampliseq.
 
@@ -22,11 +22,11 @@ checar e' um os.path.exists por arquivo, e a falha aparece antes de submeter.
 
 Uso
 ---
-    fazer_samplesheet.py colaboradores/renata/metadata.tsv \\
+    make_samplesheet.py colaboradores/renata/metadata.tsv \\
         --out split/samplesheets/renata/samplesheet_completo.tsv
 
     # varios de uma vez, um arquivo por colaborador
-    fazer_samplesheet.py colaboradores/*/metadata.tsv --out-dir samplesheets/
+    make_samplesheet.py colaboradores/*/metadata.tsv --out-dir samplesheets/
 
 Compativel com Python 3.6, so biblioteca padrao.
 """
@@ -43,7 +43,7 @@ def ler(caminho):
         for obrig in ("sample", "fastq_1", "fastq_2"):
             if obrig not in idx:
                 sys.exit("ERRO: %s nao tem a coluna '%s' — este script espera o "
-                         "metadata.tsv do organizar_colaboradores.py"
+                         "metadata.tsv do organize_project.py"
                          % (caminho, obrig))
         linhas = []
         for l in fh:
@@ -84,7 +84,7 @@ def main():
 
         escolhidas, faltando, controles = [], [], 0
         for r in linhas:
-            eh_ctrl = r.get("controle", "nao").strip().lower() == "sim"
+            eh_ctrl = r.get("control", r.get("controle", "no")).strip().lower() in ("yes", "sim")
             if eh_ctrl:
                 controles += 1
                 if args.sem_controles:

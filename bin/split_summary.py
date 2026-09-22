@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-resumo_split.py — metricas do split e samplesheets por regiao
+split_summary.py — metricas do split e samplesheets por regiao
 
-Faz duas coisas depois que o split_regioes.sh roda:
+Faz duas coisas depois que o split_regions.sh roda:
 
   1. Le os relatorios JSON do cutadapt e monta a tabela de reads por
      amostra x regiao, com a fracao atribuida. O criterio de aceite do
@@ -16,7 +16,7 @@ Faz duas coisas depois que o split_regioes.sh roda:
      decide se ela sustenta uma analise de comunidade.
 
 Uso:
-    python3 resumo_split.py <dir_saida_do_split> [--minimo 1000]
+    python3 split_summary.py <dir_saida_do_split> [--minimo 1000]
 
 Compativel com Python 3.6.
 """
@@ -60,7 +60,7 @@ def contar_reads(caminho):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("saida", help="diretorio usado no split_regioes.sh")
+    ap.add_argument("saida", help="diretorio usado no split_regions.sh")
     ap.add_argument("--minimo", type=int, default=1000,
                     help="piso de reads por amostra x regiao (padrao 1000)")
     ap.add_argument("--jobs", type=int,
@@ -75,7 +75,7 @@ def main():
                          "['items']['properties']))\" $WF/assets/schema_input.json")
     ap.add_argument("--colaboradores", metavar="DIR",
                     help="diretorio com <colaborador>/metadata.tsv (a saida do "
-                         "organizar_colaboradores.py). Com isso as samplesheets "
+                         "organize_project.py). Com isso as samplesheets "
                          "saem por colaborador e por regiao, ja com o ID "
                          "original no lugar do ID de sequenciamento.")
     args = ap.parse_args()
@@ -137,7 +137,7 @@ def main():
             if 0 < d.get(r, 0) < args.minimo:
                 rasas.append((amostra, r, d[r]))
 
-    with open(os.path.join(args.saida, "resumo_split.csv"), "w") as fh:
+    with open(os.path.join(args.saida, "split_summary.csv"), "w") as fh:
         w = csv.writer(fh)
         w.writerow(cab)
         w.writerows(linhas_csv)
@@ -236,7 +236,7 @@ def main():
             n = escrever(caminho, reg, sorted(tabela))
             print("  %-10s %3d amostras  -> %s" % (reg, n, caminho))
 
-    print("\nTabela completa em %s" % os.path.join(args.saida, "resumo_split.csv"))
+    print("\nTabela completa em %s" % os.path.join(args.saida, "split_summary.csv"))
 
 
 if __name__ == "__main__":

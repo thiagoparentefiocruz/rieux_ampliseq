@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-organizar_colaboradores.py
+organize_project.py
 
 Cruza a planilha de amostras com os dados em disco e monta, para cada
 colaborador, um diretorio proprio com os FASTQ identificados pelo ID
@@ -25,9 +25,9 @@ DECISOES DE DESENHO, e o porque:
   fica preservado na coluna id_original da tabela de metadados.
 
 Uso:
-    python3 organizar_colaboradores.py planilha.csv dir_dados_brutos dir_saida
-    python3 organizar_colaboradores.py ... --executar     # cria os links
-    python3 organizar_colaboradores.py ... --copiar       # copia em vez de linkar
+    python3 organize_project.py planilha.csv dir_dados_brutos dir_saida
+    python3 organize_project.py ... --executar     # cria os links
+    python3 organize_project.py ... --copiar       # copia em vez de linkar
 
 Sem --executar ele so relata; nada e criado.
 
@@ -90,7 +90,7 @@ def main():
                     help="cria de fato os links/copias (padrao: so relata)")
     ap.add_argument("--copiar", action="store_true",
                     help="copia os arquivos em vez de criar symlinks")
-    ap.add_argument("--controles", default="^Smart",
+    ap.add_argument("--controls", default="^Smart",
                     help="regex das amostras em disco que sao controles. Elas "
                          "nao estao na planilha e sao linkadas em TODAS as "
                          "pastas, marcadas na coluna 'controle'. Passe uma "
@@ -207,15 +207,15 @@ def main():
             chave = sanear(orig).lower()
             rep = (not eh_controle) and len(grupos[(dono, chave)]) > 1
             linhas_meta.append([base, seq, orig, dono, grupo or "-",
-                                "sim" if rep else "nao",
-                                "sim" if eh_controle else "nao",
+                                "yes" if rep else "no",
+                                "yes" if eh_controle else "no",
                                 os.path.abspath(os.path.join(destino, base + "_R1.fastq.gz")),
                                 os.path.abspath(os.path.join(destino, base + "_R2.fastq.gz"))])
 
         if args.executar:
             with open(meta, "w") as fh:
-                fh.write("sample\tid_sequenciamento\tid_original\tcolaborador"
-                         "\tgrupo\treplicata\tcontrole\tfastq_1\tfastq_2\n")
+                fh.write("sample\tseq_id\toriginal_id\tproject"
+                         "\tgroup\treplicate\tcontrol\tfastq_1\tfastq_2\n")
                 for l in linhas_meta:
                     fh.write("\t".join(l) + "\n")
         print("  %-10s %3d amostras + %d controle(s) -> %s"

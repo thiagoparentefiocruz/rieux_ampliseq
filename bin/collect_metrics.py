@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-coletar_metricas.py — consolida as execucoes do ampliseq em final_reports/
+collect_metrics.py — consolida as execucoes do ampliseq em final_reports/
 
 Este script e a metade do contrato que fica do lado do cluster. Ele roda no
 rieux, SO com biblioteca padrao — sem R, sem CRAN, sem versao de pacote para
@@ -13,15 +13,15 @@ trabalho do wrapper, nao do pacote de visualizacao.
 
 Saida (final_reports/)
 ----------------------
-  reads_por_regiao.tsv        nome regiao amostra controle entrada filtrado
+  reads_per_region.tsv        nome regiao amostra controle entrada filtrado
                               denoisedF denoisedR merged naochim
-  classificacao.tsv           nome regiao rank n_asv n_classificado pct
-  abundancia.tsv              nome regiao rank taxon reads_amostras rel_pct
+  classification.tsv           nome regiao rank n_asv n_classificado pct
+  abundance.tsv              nome regiao rank taxon reads_amostras rel_pct
                               n_amostras reads_controles
-  comprimento_asv.tsv         nome regiao comprimento n_asv
-  abundancia_por_amostra.tsv  nome regiao rank taxon amostra controle reads
+  asv_length.tsv         nome regiao comprimento n_asv
+  abundance_per_sample.tsv  nome regiao rank taxon amostra controle reads
                               pct_amostra
-  prevalencia.tsv             nome regiao rank taxon n_presente n_total
+  prevalence.tsv             nome regiao rank taxon n_presente n_total
                               pct_prevalencia pct_mediano pct_max amostra_max
                               n_controles_presente
 
@@ -32,14 +32,14 @@ oposta nos dois casos.
 Uso
 ---
     # layout do wrapper: <resultados>/<REGIAO>/
-    coletar_metricas.py --resultados resultados/fabio --nome fabio \
+    collect_metrics.py --resultados resultados/fabio --nome fabio \
                         --out resultados/fabio/final_reports
 
     # varios conjuntos de uma vez: <raiz>/resultados/<nome>/<REGIAO>/
-    coletar_metricas.py --raiz .
+    collect_metrics.py --raiz .
 
     # so uma parte, e com foco num taxon
-    coletar_metricas.py --resultados resultados/fabio --nome fabio \
+    collect_metrics.py --resultados resultados/fabio --nome fabio \
                         --regioes ITS1 --foco 'antarctomyces|ochrolechia'
 
 Compativel com Python 3.6, so biblioteca padrao.
@@ -66,7 +66,7 @@ RANKS_DETALHE = ["Family", "Genus", "Species"]
 
 # O padrao e o Smart Control do painel QIAseq, mas o nome do controle e do
 # EXPERIMENTO, nao da ferramenta: quem usa branco de extracao chamado "NTC" ou
-# "blank" precisa que isto seja parametro. Trocado por --controles.
+# "blank" precisa que isto seja parametro. Trocado por --controls.
 PADRAO_CONTROLE = r"^[Ss]mart"
 _rx_controle = re.compile(PADRAO_CONTROLE)
 
@@ -120,7 +120,7 @@ def retencao(dir_regiao, nome, regiao, saida):
     for l in linhas:
         amostra = l[0]
         saida.append([nome, regiao, amostra,
-                      "sim" if eh_controle(amostra) else "nao",
+                      "yes" if eh_controle(amostra) else "no",
                       pega(l, "DADA2_input"), pega(l, "filtered"),
                       pega(l, "denoisedF"), pega(l, "denoisedR"),
                       pega(l, "merged"), pega(l, "nonchim")])
@@ -287,7 +287,7 @@ def taxonomia(dir_regiao, nome, regiao, s_cls, s_abd, s_amo, s_prev,
                 continue
             den = tot[r][i]
             s_amo.append([nome, regiao, r, taxon, amostras[i],
-                          "sim" if ctrl[i] else "nao", "%.0f" % v,
+                          "yes" if ctrl[i] else "no", "%.0f" % v,
                           "%.3f" % (100.0 * v / den if den else 0.0)])
 
         if rx_foco and rx_foco.search(taxon):
@@ -324,7 +324,7 @@ def nomes_do_painel(caminho):
             if linha.startswith("#") or not linha.strip():
                 continue
             c = linha.split("\t")
-            if c[0] == "regiao" or c[0] == "region":
+            if c[0] in ("region", "regiao"):   # aceita a grafia antiga
                 continue
             nomes.add(c[0].strip())
     return nomes or None
@@ -352,7 +352,7 @@ def main():
     ap.add_argument("--primers", default=None,
                     help="tabela de primers; a primeira coluna e a lista "
                          "autoritativa de regioes do painel")
-    ap.add_argument("--controles", default=PADRAO_CONTROLE,
+    ap.add_argument("--controls", default=PADRAO_CONTROLE,
                     help="regex dos nomes de amostra que sao controle "
                          "(padrao: %(default)s)")
     ap.add_argument("--com-variantes", action="store_true",
@@ -415,23 +415,23 @@ def main():
         print("  %-30s %8d linhas" % (arquivo, len(linhas)))
 
     print("\nGravando em %s/" % out)
-    gravar("reads_por_regiao.tsv",
-           ["nome", "regiao", "amostra", "controle", "entrada", "filtrado",
-            "denoisedF", "denoisedR", "merged", "naochim"], s_ret)
-    gravar("classificacao.tsv",
-           ["nome", "regiao", "rank", "n_asv", "n_classificado", "pct"], s_cls)
-    gravar("abundancia.tsv",
-           ["nome", "regiao", "rank", "taxon", "reads_amostras", "rel_pct",
-            "n_amostras", "reads_controles"], s_abd)
-    gravar("comprimento_asv.tsv",
-           ["nome", "regiao", "comprimento", "n_asv"], s_len)
-    gravar("abundancia_por_amostra.tsv",
-           ["nome", "regiao", "rank", "taxon", "amostra", "controle", "reads",
-            "pct_amostra"], s_amo)
-    gravar("prevalencia.tsv",
-           ["nome", "regiao", "rank", "taxon", "n_presente", "n_total",
-            "pct_prevalencia", "pct_mediano", "pct_max", "amostra_max",
-            "n_controles_presente"], s_prev)
+    gravar("reads_per_region.tsv",
+           ["project", "region", "sample", "control", "input", "filtered",
+            "denoisedF", "denoisedR", "merged", "nonchim"], s_ret)
+    gravar("classification.tsv",
+           ["project", "region", "rank", "n_asv", "n_classified", "pct"], s_cls)
+    gravar("abundance.tsv",
+           ["project", "region", "rank", "taxon", "reads_samples", "rel_pct",
+            "n_samples", "reads_controls"], s_abd)
+    gravar("asv_length.tsv",
+           ["project", "region", "length", "n_asv"], s_len)
+    gravar("abundance_per_sample.tsv",
+           ["project", "region", "rank", "taxon", "sample", "control", "reads",
+            "pct_sample"], s_amo)
+    gravar("prevalence.tsv",
+           ["project", "region", "rank", "taxon", "n_present", "n_total",
+            "pct_prevalence", "pct_median", "pct_max", "sample_max",
+            "n_controls_present"], s_prev)
 
     if rx:
         print("\n" + "=" * 74)

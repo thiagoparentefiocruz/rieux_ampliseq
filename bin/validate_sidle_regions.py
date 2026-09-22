@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-validar_regioes_sidle.py — PCR in silico para checar os primers e escolher
+validate_sidle_regions.py — PCR in silico para checar os primers e escolher
                            o region_length do --multiregion
 
 Por que este script existe
@@ -9,7 +9,7 @@ O `--multiregion` do ampliseq pede um TSV com quatro colunas por regiao:
 
     region   region_length   FW_primer   RV_primer
 
-Os primers a gente ja tem (primers_painel.tsv, recuperados dos proprios FASTQ).
+Os primers a gente ja tem (primers_panel.tsv, recuperados dos proprios FASTQ).
 Mas eles foram recortados para um trabalho DIFERENTE: rotear read para regiao.
 Ali, primer mais curto e mais permissivo e' seguro — no maximo classifica um
 pouco a mais e a validacao empirica corrige.
@@ -17,7 +17,7 @@ pouco a mais e a validacao empirica corrige.
 No Sidle o mesmo primer faz outra coisa: ele RECORTA O BANCO DE REFERENCIA.
 Um primer curto demais casa em lugar errado e produz uma regiao de referencia
 deslocada — e o Sidle nao acusa erro, so reconstroi mal. O V7V9 e' o caso
-explicito: a nota do primers_painel.tsv diz que ali o nucleo e' a maior
+explicito: a nota do primers_panel.tsv diz que ali o nucleo e' a maior
 substring comum, nao o prefixo, entao a borda 5' dele e' incerta por
 construcao.
 
@@ -33,7 +33,7 @@ O que o script faz
    do painel (casamento IUPAC, tolerando ate N erros, nunca nas 3 ultimas bases
    do primer — que e' onde a polimerase de fato exige pareamento).
 2. Compara a distribuicao de comprimento extraida da REFERENCIA com a
-   distribuicao dos ASVs OBSERVADOS (comprimento_asv.tsv), pelas PONTAS (p5 e
+   distribuicao dos ASVs OBSERVADOS (asv_length.tsv), pelas PONTAS (p5 e
    p95), nao pelas medianas — a referencia e a amostra nao tem a mesma
    composicao, e duas medianas divergem 20 nt com as bordas certas.
    Deslocamento de borda move a distribuicao inteira; e' isso que se procura.
@@ -50,10 +50,10 @@ O que o script faz
 
 Uso
 ---
-    python3 validar_regioes_sidle.py \
-        --primers primers_painel.tsv \
+    python3 validate_sidle_regions.py \
+        --primers primers_panel.tsv \
         --ref bancos/silva_nr99_v138.2_toSpecies_trainset.fa.gz \
-        --asv metricas/comprimento_asv.tsv \
+        --asv metricas/asv_length.tsv \
         --out regions_multiregion.tsv
 
     # opcoes uteis
@@ -182,26 +182,27 @@ def ler_primers(caminho):
 
 
 def ler_observado(caminho, colab=None, regioes_validas=None):
-    """comprimento_asv.tsv -> {regiao: {comprimento: n_asv}}"""
+    """asv_length.tsv -> {regiao: {comprimento: n_asv}}"""
     hist = defaultdict(lambda: defaultdict(int))
     with open(caminho) as fh:
         cab = fh.readline().rstrip("\n").split("\t")
         idx = {n: i for i, n in enumerate(cab)}
         # o coletor novo chama a coluna de 'nome'; a versao anterior chamava
         # 'colaborador'. Aceitar as duas evita quebrar em tabela antiga.
-        col_nome = "nome" if "nome" in idx else "colaborador"
+        col_nome = next((c for c in ("project", "nome", "colaborador") if c in idx), None)
         for linha in fh:
             c = linha.rstrip("\n").split("\t")
             if not c or len(c) < len(cab):
                 continue
             if colab and col_nome in idx and c[idx[col_nome]] != colab:
                 continue
-            reg = c[idx["regiao"]]
+            reg = c[idx["region" if "region" in idx else "regiao"]]
             # so as regioes canonicas: as variantes de diagnostico (V1V2_t160_ruim)
             # nao podem entrar na distribuicao que decide o corte
             if regioes_validas and reg not in regioes_validas:
                 continue
-            hist[reg][int(c[idx["comprimento"]])] += int(c[idx["n_asv"]])
+            col_len = "length" if "length" in idx else "comprimento"
+            hist[reg][int(c[idx[col_len]])] += int(c[idx["n_asv"]])
     return hist
 
 
@@ -244,16 +245,16 @@ def main():
     # PATH e' chamada de qualquer lugar; procurar no cwd e' pedir para rodar com
     # a tabela errada sem perceber.
     aqui = os.path.dirname(os.path.abspath(__file__))
-    padrao_primers = os.path.join(aqui, os.pardir, "assets", "primers_painel.tsv")
+    padrao_primers = os.path.join(aqui, os.pardir, "assets", "primers_panel.tsv")
     if not os.path.isfile(padrao_primers):
-        padrao_primers = "primers_painel.tsv"
+        padrao_primers = "primers_panel.tsv"
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--primers", default=padrao_primers)
     ap.add_argument("--ref", required=True,
                     help="fasta do banco de referencia (pode ser .gz)")
     ap.add_argument("--asv", default=None,
-                    help="metricas/comprimento_asv.tsv (opcional, mas e' a "
+                    help="metricas/asv_length.tsv (opcional, mas e' a "
                          "metade que valida)")
     ap.add_argument("--out", default="regions_multiregion.tsv")
     ap.add_argument("--n", type=int, default=20000)

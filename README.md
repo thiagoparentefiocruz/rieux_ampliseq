@@ -11,17 +11,17 @@ Built for the **QIAseq 16S/ITS Pro Screening Panel (96)** — six 16S regions
 
 What is panel-specific and what is not:
 
-- The **primers** in `assets/primers_painel.tsv` are that kit's, recovered from
+- The **primers** in `assets/primers_panel.tsv` are that kit's, recovered from
   sequencing data with `bin/discover_primers.py` (QIAGEN does not publish them).
   Another panel supplies its own table — or runs that script on its own reads.
-- The **truncation lengths** in `assets/parametros_regioes.tsv` were derived
+- The **truncation lengths** in `assets/region_params.tsv` were derived
   from one specific run. They depend on read length and quality, so they are a
   starting point, not a setting: re-derive them for your run with
-  `bin/perfil_qualidade.py`. Getting this wrong is expensive — an earlier
+  `bin/quality_profile.py`. Getting this wrong is expensive — an earlier
   version of that table capped V1V2 below the real community median and
   silently destroyed 98% of its merges.
 - The **control name** defaults to the kit's Smart Control (`^[Ss]mart`) and is
-  a flag everywhere (`--controles`), because what counts as a control belongs to
+  a flag everywhere (`--controls`), because what counts as a control belongs to
   the experiment, not to the tool.
 - The **region names** come from the primers table, not from a naming
   convention. A panel whose regions are called `region1..region5` — the example
@@ -36,23 +36,25 @@ standard library only, the R package does everything that needs R.
 ## Installation
 
 ```bash
-git clone https://github.com/thiagoparentefiocruz/rieux_ampliseq.git ~/rieux_ampliseq
-chmod +x ~/rieux_ampliseq/rieux_ampliseq.sh ~/rieux_ampliseq/bin/*
-echo 'export PATH="$HOME/rieux_ampliseq:$PATH"' >> ~/.bashrc
+cd ~
+git clone https://github.com/thiagoparentefiocruz/rieux_ampliseq.git
+cd rieux_ampliseq
+./install.sh --mode command          # or: --mode source
 source ~/.bashrc
 ```
 
-Then tell it, once, where your installation lives — containers, `NXF_HOME` and
-the reference databases:
+The installer asks where your pipeline installation lives — the directory
+holding `nextflow_home/`, `singularity/` and `bancos.env` — and saves it to
+`~/.rieux_ampliseq.conf`. Pass it directly with `--base DIR` to skip the
+prompt. It then checks the prerequisites and names the ones that are missing.
 
-```bash
-echo 'RIEUX_PIPELINE_BASE=/path/to/your/pipeline' > ~/.rieux_ampliseq.conf
-```
+Running it twice does not duplicate anything, and `./install.sh --uninstall`
+removes what it added.
 
 No path in this repository is tied to any particular account. The wrapper
-sources `bin/ambiente.sh` on its own if the reference-database variables are not
-already in the environment, and `ambiente.sh` refuses to run rather than guess
-that directory.
+sources `bin/env.sh` on its own if the reference-database variables are not
+already in the environment, and `env.sh` refuses to run rather than guess that
+directory.
 
 ## Stages
 
@@ -60,38 +62,38 @@ The run is a chain of stages, each of which can be run alone, and the chain can
 be entered or left at any point:
 
 ```
-organizar -> descobrir -> dividir -> perfilar -> rodar -> sidle -> consolidar
+organize -> discover -> split -> profile -> run -> sidle -> collect
 ```
 
 | stage | what it does |
 |---|---|
-| `organizar` | cross a sample sheet with the FASTQs on disk, one project per group |
-| `descobrir` | recover the panel's primers from the reads themselves |
-| `dividir` | route each read pair to its region, then write one samplesheet per region |
-| `perfilar` | measure per-cycle quality and pick truncLenF/R per region |
-| `rodar` | run ampliseq once per region |
+| `organize` | cross a sample sheet with the FASTQs on disk, one project per group |
+| `discover` | recover the panel's primers from the reads themselves |
+| `split` | route each read pair to its region, then write one samplesheet per region |
+| `profile` | measure per-cycle quality and pick truncLenF/R per region |
+| `run` | run ampliseq once per region |
 | `sidle` | run the multi-region reconstruction |
-| `consolidar` | write `final_reports/` |
+| `collect` | write `final_reports/` |
 
-`perfilar` comes **after** `dividir`, not before: truncation is chosen per
+`profile` comes **after** `split`, not before: truncation is chosen per
 region, so it needs the reads already routed.
 
 From scratch, one command:
 
 ```bash
 screen -S renata
-rieux_ampliseq.sh --projeto renata --brutos brutos/renata
+rieux_ampliseq --project renata --raw-dir brutos/renata
 # Ctrl-A then D
 ```
 
 Re-entering in the middle, when what came before already exists:
 
 ```bash
-rieux_ampliseq.sh --projeto renata --from rodar
-rieux_ampliseq.sh --projeto renata --stage consolidar
+rieux_ampliseq --project renata --from rodar
+rieux_ampliseq --project renata --stage consolidar
 ```
 
-`organizar` is skipped by default and is the only one-to-many stage: one sample
+`organize` is skipped by default and is the only one-to-many stage: one sample
 sheet becomes several projects, so it does not chain — it writes the projects
 and prints the next command for each.
 
@@ -102,15 +104,15 @@ with a known layout, and that is what makes re-entry possible without
 re-stating everything that came before:
 
 ```
-<projeto>/
-  brutos/                  FASTQs (symlinks), from `organizar`
-  metadata.tsv             sample -> group, from `organizar`
-  primers.tsv              from `descobrir`, or copied from --primers
-  parametros_regioes.tsv   truncLen per region, from `perfilar`
-  split/samplesheets/      from `dividir`
-  <REGION>/                one ampliseq run, from `rodar`
+<project>/
+  raw/                     FASTQs (symlinks), from `organize`
+  metadata.tsv             sample -> group, from `organize`
+  primers.tsv              from `discover`, or copied from --primers
+  region_params.tsv   truncLen per region, from `profile`
+  split/samplesheets/      from `split`
+  <REGION>/                one ampliseq run, from `run`
   sidle/                   from `sidle`
-  final_reports/           from `consolidar`
+  final_reports/           from `collect`
   logs/
 ```
 
@@ -127,8 +129,8 @@ only compete for the same queue. Two **datasets** in parallel is a different
 matter — different partitions, and there the gain is real:
 
 ```bash
-rieux_ampliseq.sh --projeto fabio    --from rodar                          # cpu
-rieux_ampliseq.sh --projeto patricia --from rodar \
+rieux_ampliseq --project fabio    --from rodar                          # cpu
+rieux_ampliseq --project patricia --from rodar \
                   --partition fat --work-dir exec/patricia
 ```
 
@@ -143,13 +145,13 @@ re-running after a failure picks up where it stopped.
 
 | flag | meaning |
 |---|---|
-| `--projeto NAME` | label for the project; also its working directory |
-| `--outdir DIR` | project root (default `./<projeto>`) |
+| `--project NAME` | label for the project; also its working directory |
+| `--outdir DIR` | project root (default `./<project>`) |
 | `--stage/--from/--until/--skip` | which stages to run |
-| `--brutos DIR` | raw FASTQs (default `<projeto>/brutos`) |
-| `--primers FILE` | skip `descobrir` — you already know your panel's primers |
-| `--params FILE` | skip `perfilar` — you already chose truncLen |
-| `--controles REGEX` | which sample names are controls (default `^[Ss]mart`) |
+| `--raw-dir DIR` | raw FASTQs (default `<project>/brutos`) |
+| `--primers FILE` | skip `discover` — you already know your panel's primers |
+| `--params FILE` | skip `profile` — you already chose truncLen |
+| `--controls REGEX` | which sample names are controls (default `^[Ss]mart`) |
 | `--partition NAME` | SLURM partition (default `cpu`) |
 | `--regions "A B"` | only these regions |
 | `--work-dir DIR` | Nextflow launch directory |
@@ -162,7 +164,7 @@ re-running after a failure picks up where it stopped.
 ## The Sidle branch
 
 `--multiregion` takes the `regions_multiregion.tsv` produced by
-`bin/validar_regioes_sidle.py`, which is a step you should not skip. That file
+`bin/validate_sidle_regions.py`, which is a step you should not skip. That file
 carries, per region, the primer pair **and** a `region_length`, and ampliseq
 trims every sequence to that length and **discards anything shorter**.
 
@@ -171,10 +173,10 @@ the resulting length distribution with the observed ASV lengths, so both the
 primer boundaries and the cut are chosen from data:
 
 ```bash
-bin/validar_regioes_sidle.py \
-    --primers assets/primers_painel.tsv \
+bin/validate_sidle_regions.py \
+    --primers assets/primers_panel.tsv \
     --ref "$DB_SILVA_GENERO" \
-    --asv resultados/fabio/final_reports/comprimento_asv.tsv \
+    --asv resultados/fabio/final_reports/asv_length.tsv \
     --out regions_multiregion.tsv
 ```
 
@@ -200,12 +202,12 @@ its denominator — without it you cannot know what the reconstruction dropped.
 
 | file | one row per |
 |---|---|
-| `reads_por_regiao.tsv` | sample × region, through every DADA2 step |
-| `classificacao.tsv` | region × rank — how far classification got |
-| `abundancia.tsv` | taxon × region, aggregated, controls separated |
-| `comprimento_asv.tsv` | ASV length histogram per region |
-| `abundancia_por_amostra.tsv` | taxon × sample |
-| `prevalencia.tsv` | taxon × region — in how many samples it occurs |
+| `reads_per_region.tsv` | sample × region, through every DADA2 step |
+| `classification.tsv` | region × rank — how far classification got |
+| `abundance.tsv` | taxon × region, aggregated, controls separated |
+| `asv_length.tsv` | ASV length histogram per region |
+| `abundance_per_sample.tsv` | taxon × sample |
+| `prevalence.tsv` | taxon × region — in how many samples it occurs |
 
 The last two answer a question the aggregated tables cannot: a taxon at 42% may
 be in every sample or piled into one, and those call for opposite decisions.
@@ -229,23 +231,23 @@ fat partition — with SILVA they are the only genuinely memory-hungry step.
 
 | script | what it does |
 |---|---|
-| `ambiente.sh` | environment for the Nextflow driver |
-| `split_regioes.sh` | routes raw reads into per-region files (SLURM array) |
-| `resumo_split.py` | split metrics + one samplesheet per region |
-| `organizar_projeto.py` | sample sheet + FASTQs on disk -> one project per group |
+| `env.sh` | environment for the Nextflow driver |
+| `split_regions.sh` | routes raw reads into per-region files (SLURM array) |
+| `split_summary.py` | split metrics + one samplesheet per region |
+| `organize_project.py` | sample sheet + FASTQs on disk -> one project per group |
 | `discover_primers.py` | recovers the panel's primers from the FASTQs |
-| `validar_regioes_sidle.py` | in-silico PCR; writes `regions_multiregion.tsv` |
-| `fazer_samplesheet.py` | builds the undivided-reads samplesheet for the Sidle branch |
-| `preparar_unite.py` | formats UNITE into the two FASTA files DADA2 needs |
-| `coletar_metricas.py` | builds `final_reports/` |
-| `avaliar_execucao.py` | per-run QC report |
-| `perfil_qualidade.py` | quality profiles, for choosing truncation |
+| `validate_sidle_regions.py` | in-silico PCR; writes `regions_multiregion.tsv` |
+| `make_samplesheet.py` | builds the undivided-reads samplesheet for the Sidle branch |
+| `prepare_unite.py` | formats UNITE into the two FASTA files DADA2 needs |
+| `collect_metrics.py` | builds `final_reports/` |
+| `evaluate_run.py` | per-run QC report |
+| `quality_profile.py` | quality profiles, for choosing truncation |
 
 ### One gotcha worth stating out loud
 
 `--dada_ref_tax_custom` **does not** run the `fmtscript` that
 `--dada_ref_taxonomy` runs. Passing a database by hand means passing it already
-formatted — and nothing warns you if you pass it raw. `preparar_unite.py` exists
+formatted — and nothing warns you if you pass it raw. `prepare_unite.py` exists
 because of this: it reproduces ampliseq's own `taxref_reformat_unite.sh` and
 emits the **two** files (`assignTaxonomy` and `addSpecies`) that the official
 path uses.

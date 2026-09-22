@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-avaliar_execucao.py — criterios de aceite de uma execucao do ampliseq
+evaluate_run.py — criterios de aceite de uma execucao do ampliseq
 
 Le a saida de um `nextflow run nf-core/ampliseq` e responde as perguntas que
 decidem se o resultado presta, sem precisar abrir PDF nem HTML:
@@ -20,7 +20,7 @@ decidem se o resultado presta, sem precisar abrir PDF nem HTML:
      como leitura de contaminacao.
 
 Uso:
-    python3 avaliar_execucao.py piloto/fabio_V3V4 [--controles '^Smart']
+    python3 evaluate_run.py piloto/fabio_V3V4 [--controls '^Smart']
 
 Compativel com Python 3.6.
 """
@@ -99,7 +99,7 @@ def etapas(linhas):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("outdir")
-    ap.add_argument("--controles", default="^Smart")
+    ap.add_argument("--controls", default="^Smart")
     ap.add_argument("--min-merge", type=float, default=70.0)
     ap.add_argument("--comparar", metavar="OUTRO_OUTDIR",
                     help="compara a taxa de fusao amostra a amostra com outra "

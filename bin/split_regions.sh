@@ -5,7 +5,7 @@
 #SBATCH --mem=8G
 #SBATCH --output=logs/split_%A_%a.log
 #
-# split_regioes.sh — separa as reads de cada amostra por regiao do painel
+# split_regions.sh — separa as reads de cada amostra por regiao do painel
 #
 # O PROBLEMA QUE ELE RESOLVE
 # Cada amostra tem UM par de FASTQ com os amplicons das 7 regioes
@@ -33,13 +33,13 @@
 # USO
 #   mkdir -p logs
 #   # 1. descobre quantos indices sao necessarios (roda fora do SLURM):
-#   bash split_regioes.sh <brutos> <primers.tsv> <saida>
+#   bash split_regions.sh <brutos> <primers.tsv> <saida>
 #   # 2. submete com o --array que ele indicar:
-#   sbatch --array=1-30%10 split_regioes.sh <brutos> <primers.tsv> <saida>
+#   sbatch --array=1-30%10 split_regions.sh <brutos> <primers.tsv> <saida>
 #
 # LOTE controla quantas amostras cada tarefa processa (padrao 10). Aumente
 # se o QOS do cluster limitar jobs submetidos:
-#   LOTE=30 sbatch --export=ALL,LOTE=30 --array=1-10 split_regioes.sh ...
+#   LOTE=30 sbatch --export=ALL,LOTE=30 --array=1-10 split_regions.sh ...
 #
 # E idempotente: amostra que ja tem relatorio JSON e pulada, entao dá para
 # resubmeter depois de uma falha parcial sem refazer trabalho.
@@ -47,7 +47,7 @@
 set -euo pipefail
 
 BRUTOS="${1:?informe o diretorio dos dados brutos}"
-TABELA="${2:?informe o primers_painel.tsv}"
+TABELA="${2:?informe o primers_panel.tsv}"
 SAIDA="${3:-split_saida}"
 
 THREADS="${SLURM_CPUS_PER_TASK:-4}"

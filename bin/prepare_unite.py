@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-preparar_unite.py — transforma o download do UNITE nos DOIS FASTA que o DADA2 usa
+prepare_unite.py — transforma o download do UNITE nos DOIS FASTA que o DADA2 usa
 
 O UNITE e distribuido como TARBALL (.tgz) contendo varios FASTA, nao como um
 FASTA comprimido. Quando o ampliseq baixa esse banco pelo caminho oficial
@@ -33,7 +33,7 @@ Por que Python e nao shell: os nos de computacao deste cluster nao tem `tar`
 nem GNU sed garantidos no PATH. tarfile, gzip e re sao biblioteca padrao.
 
 Uso:
-    python3 preparar_unite.py [caminho/para/bancos.env]
+    python3 prepare_unite.py [caminho/para/bancos.env]
 
 E idempotente: reexecutar reformata a partir do arquivo bruto preservado em
 DB_UNITE_BRUTO, nunca em cima de um arquivo ja reformatado.
@@ -48,7 +48,7 @@ import shutil
 import sys
 import tarfile
 
-# sem caminho de ninguem cravado: vem do RIEUX_PIPELINE_BASE, igual ao ambiente.sh
+# sem caminho de ninguem cravado: vem do RIEUX_PIPELINE_BASE, igual ao env.sh
 PADRAO = os.path.join(os.environ.get("RIEUX_PIPELINE_BASE", "."), "bancos.env")
 
 
@@ -279,7 +279,7 @@ def main():
         if chave.startswith("DB_"):
             print("  %-20s %s" % (chave, valor))
     print("\nRecarregue o ambiente antes de rodar o ITS1:")
-    print("  source <repo>/bin/ambiente.sh")
+    print("  source <repo>/bin/env.sh")
 
 
 if __name__ == "__main__":

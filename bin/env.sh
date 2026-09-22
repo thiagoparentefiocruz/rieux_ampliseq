@@ -1,6 +1,6 @@
-# ambiente.sh — carregue antes de qualquer chamada ao Nextflow.
+# env.sh — carregue antes de qualquer chamada ao Nextflow.
 #
-#     source ambiente.sh
+#     source env.sh
 #
 # Estas variaveis precisam existir no ambiente do PROCESSO que conduz o
 # pipeline (o "driver"), nao dentro do nextflow.config: o driver le a
@@ -27,10 +27,10 @@ if [[ -z "${RIEUX_PIPELINE_BASE:-}" && -r "$HOME/.rieux_ampliseq.conf" ]]; then
 fi
 BASE="${RIEUX_PIPELINE_BASE:-}"
 if [[ -z "$BASE" || ! -d "$BASE" ]]; then
-    echo "ERRO: RIEUX_PIPELINE_BASE nao definida (ou aponta para nada)." >&2
-    echo "      Crie ~/.rieux_ampliseq.conf com uma linha:" >&2
-    echo "        RIEUX_PIPELINE_BASE=/caminho/para/pipeline" >&2
-    echo "      Esse diretorio guarda nextflow_home/, singularity/ e bancos.env." >&2
+    echo "ERROR: RIEUX_PIPELINE_BASE is not set (or points nowhere)." >&2
+    echo "      Create ~/.rieux_ampliseq.conf with one line:" >&2
+    echo "        RIEUX_PIPELINE_BASE=/path/to/pipeline" >&2
+    echo "      That directory holds nextflow_home/, singularity/ and bancos.env." >&2
     return 1 2>/dev/null || exit 1
 fi
 
@@ -74,7 +74,7 @@ if ! curl -sS --max-time 5 https://api.github.com -o /dev/null 2>/dev/null; then
         if [[ -r "$ca" ]]; then
             export CURL_CA_BUNDLE="$ca"
             export SSL_CERT_FILE="$ca"
-            echo "  (cacert do modulo quebrado; usando $ca)"
+            echo "  (module cacert is broken; using $ca)"
             break
         fi
     done
@@ -85,8 +85,8 @@ fi
 # shellcheck disable=SC1090
 [[ -r "$BASE/bancos.env" ]] && source "$BASE/bancos.env"
 
-echo "ambiente carregado:"
-echo "  nextflow : $(command -v nextflow || echo AUSENTE) ($(nextflow -v 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1))"
+echo "environment loaded:"
+echo "  nextflow : $(command -v nextflow || echo MISSING) ($(nextflow -v 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1))"
 echo "  NXF_HOME : $NXF_HOME"
 echo "  plugins  : $(ls "$NXF_HOME/plugins" 2>/dev/null | tr '\n' ' ')"
-echo "  offline  : ${NXF_OFFLINE:-nao (driver no login)}"
+echo "  offline  : ${NXF_OFFLINE:-no (driver on login node)}"

@@ -30,7 +30,7 @@
 #
 #	banco: silva (16S) ou unite (ITS).
 #
-regiao	trunclenf	trunclenr	banco	extra
+region	trunclenf	trunclenr	database	extra
 V1V2	230	230	silva
 V2V3	213	212	silva
 V3V4	238	237	silva

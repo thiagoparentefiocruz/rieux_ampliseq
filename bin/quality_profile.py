@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-perfil_qualidade.py — escolhe truncLenF/truncLenR por regiao
+quality_profile.py — escolhe truncLenF/truncLenR por regiao
 
 Por que isto existe: o NextSeq 2000 emite qualidade em 4 bins (Q2, Q12,
 Q24, Q40). O `--trunc_qmin` do ampliseq decide o corte pela mediana de
@@ -22,7 +22,7 @@ Quando nao cabe, avisa e mostra o deficit em vez de devolver um numero
 que so falharia horas depois.
 
 Uso:
-    python3 perfil_qualidade.py <dir_split> [--amostras 12] [--reads 20000]
+    python3 quality_profile.py <dir_split> [--amostras 12] [--reads 20000]
 
 Compativel com Python 3.6.
 """
@@ -109,7 +109,7 @@ def main():
                          "50 funde melhor que 89. Nao truncar no maximo.")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--out", default=None,
-                    help="grava os truncLen escolhidos como parametros_regioes.tsv")
+                    help="grava os truncLen escolhidos como region_params.tsv")
     args = ap.parse_args()
 
     random.seed(args.seed)
@@ -225,10 +225,10 @@ def main():
         if pasta:
             os.makedirs(pasta, exist_ok=True)
         with open(args.out, "w") as fh:
-            fh.write("# Gerado por perfil_qualidade.py a partir das reads desta\n"
+            fh.write("# Gerado por quality_profile.py a partir das reads desta\n"
                      "# corrida. truncLen depende de comprimento e qualidade da\n"
                      "# corrida: NAO reaproveite esta tabela em outra.\n")
-            fh.write("regiao\ttrunclenf\ttrunclenr\tbanco\textra\n")
+            fh.write("region\ttrunclenf\ttrunclenr\tdatabase\textra\n")
             for reg, cF, cR in linhas_cfg:
                 if reg.upper().startswith("ITS"):
                     # ITS nao tem comprimento fixo: truncar corta ASV legitimo.
