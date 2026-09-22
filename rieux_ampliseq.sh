@@ -515,6 +515,5 @@ if rodar_estagio collect; then
              --results "$RAIZ" --name "$PROJETO" \
              --out "$RAIZ/final_reports" \
              --primers "$PRIMERS" --controls "$CONTROLES" || exit 1
-    echo
-    echo "  in R:  data <- aspp::read_ampliseq_summary('$RAIZ/final_reports')"
+
 fi
