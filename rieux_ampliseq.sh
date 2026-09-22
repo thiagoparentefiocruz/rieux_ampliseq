@@ -407,6 +407,7 @@ if rodar_estagio split; then
              --array="1-${n_tarefas}%10" \
              --export="ALL,LOTE=$LOTE_SPLIT" \
              --output="$LOGS/split_%A_%a.log" \
+             --error="$LOGS/split_%A_%a.log" \
              "$AQUI/bin/split_regions.sh" "$BRUTOS" "$PRIMERS" "$SPLIT"
     rc=$?
     if (( ! SIMULAR )); then

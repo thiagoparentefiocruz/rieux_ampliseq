@@ -98,7 +98,21 @@ fi
 # uma regiao sumindo em algumas amostras e nao em outras, o pior tipo de bug
 # para diagnosticar depois.
 mkdir -p "$SAIDA/relatorios" "$SAIDA/split"
-TMP="$(mktemp -d)"
+
+# O TEMPORARIO FICA DENTRO DO $SAIDA, NAO EM /tmp.
+#
+# Ele guarda os FASTA de primers, que o cutadapt le DE DENTRO do container. Os
+# binds montam so as raizes dos caminhos de dado; /tmp nao esta entre elas, e
+# nem todo site do Singularity monta /tmp por padrao. Com os FASTA em /tmp, o
+# `-g file:...` nao acha nada e a execucao morre na primeira amostra — sem
+# mensagem util, porque o erro sai de dentro do container.
+#
+# Sob $SAIDA eles estao na mesma raiz que o resto, ja montada. O sufixo com o
+# indice da tarefa preserva a razao original de usar mktemp: 40 tarefas do
+# array escrevendo o mesmo arquivo produziriam FASTA truncado, e o sintoma
+# seria uma regiao sumindo em algumas amostras e nao em outras.
+TMP="$SAIDA/.tmp_task_${IDX}"
+rm -rf "$TMP"; mkdir -p "$TMP"
 trap 'rm -rf "$TMP"' EXIT
 F_FA="$TMP/forward.fasta"
 R_FA="$TMP/reverse.fasta"
