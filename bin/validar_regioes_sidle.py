@@ -415,21 +415,32 @@ def main():
     # ---- arquivo do --multiregion
     # O Sidle e' 16S com regiao de referencia; ITS1 nao entra e continua trilha
     # separada.
+    #
+    # Escreve os DOIS arquivos numa passada so: o conjunto completo e o
+    # subconjunto sugerido. A versao anterior exigia rodar o script de novo com
+    # --sidle-regioes para obter o segundo, o que recomputava as 452 mil
+    # sequencias inteiras para trocar quatro linhas de um TSV. Era desperdicio,
+    # e pior, escondia que a escolha entre os dois e' o resultado do script.
     so_estas = set(r.strip() for r in args.sidle_regioes.split(",")) \
         if args.sidle_regioes else None
-    with open(args.out, "w") as fh:
-        fh.write("region\tregion_length\tFW_primer\tRV_primer\n")
-        n = 0
-        for regiao, alvo, fw, rv, recup in linhas_saida:
-            if regiao.startswith("ITS"):
-                continue
-            if not alvo:
-                continue
-            if so_estas and regiao not in so_estas:
-                continue
-            fh.write("%s\t%d\t%s\t%s\n" % (regiao, alvo, fw, rv))
-            n += 1
 
+    def gravar_regioes(caminho, filtro):
+        pasta = os.path.dirname(os.path.abspath(caminho))
+        if pasta:
+            os.makedirs(pasta, exist_ok=True)
+        with open(caminho, "w") as fh:
+            fh.write("region\tregion_length\tFW_primer\tRV_primer\n")
+            n = 0
+            for regiao, alvo, fw, rv, recup in linhas_saida:
+                if regiao.startswith("ITS") or not alvo:
+                    continue
+                if filtro and regiao not in filtro:
+                    continue
+                fh.write("%s\t%d\t%s\t%s\n" % (regiao, alvo, fw, rv))
+                n += 1
+        return n
+
+    n = gravar_regioes(args.out, so_estas)
     print("\nGravado %s com %d regioes (ITS excluido: o Sidle e' 16S)." %
           (args.out, n))
 
@@ -487,13 +498,23 @@ def main():
             if 100.0 * n_ref / total_am >= 50:
                 sugerida = (k, n_ref, combo)
                 break
-        if sugerida:
+        if sugerida and not so_estas:
             k, n_ref, combo = sugerida
+            raiz, ext = os.path.splitext(args.out)
+            alt = raiz + "_sugerido" + (ext or ".tsv")
+            n_alt = gravar_regioes(alt, set(combo))
             print("\n  Maior conjunto que ainda cobre metade do banco: %s"
                   % " ".join(combo))
-            print("  (%d referencias, %.1f%%). Para usar so estas no Sidle:"
-                  % (n_ref, 100.0 * n_ref / total_am))
-            print("    --sidle-regioes %s" % ",".join(combo))
+            print("  (%d referencias, %.1f%% — contra %.1f%% com as %d regioes)"
+                  % (n_ref, 100.0 * n_ref / total_am,
+                     100.0 * len(todas) / total_am, len(regs16)))
+            print("  Gravado %s com %d regioes." % (alt, n_alt))
+            print()
+            print("  Os dois arquivos existem de proposito: qual usar e' uma")
+            print("  questao empirica, nao de preferencia. Rodar os dois e")
+            print("  comparar quanto do dado sobrevive a reconstrucao e a unica")
+            print("  forma de saber — a documentacao do Sidle nao diz o que")
+            print("  acontece com uma referencia ausente de uma das regioes.")
     print("\nComo ler isto:")
     print("  A coluna 'recup' e' quantas referencias contem a regiao — nao e'")
     print("  medida de qualidade do primer. As entradas do SILVA sao truncadas")
