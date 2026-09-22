@@ -254,6 +254,23 @@ checar_dado "$CONFIG"        --config
 checar_dado "$MULTIREGION"   --multiregion
 (( erros )) && exit 1
 
+# Uma tabela informada por flag vira parte do projeto.
+#
+# Os estagios se comunicam pelo diretorio do projeto; uma entrada que so existe
+# como flag quebra essa promessa — e na pratica quebra na mao do usuario, que
+# tem de repetir o mesmo --primers em toda chamada e erra o caminho uma hora
+# (um $VARIAVEL vazio dentro de um screen antigo, por exemplo). Copiando uma
+# vez, as chamadas seguintes dispensam a flag.
+adotar() {   # adotar <origem> <destino> <rotulo>
+    [[ -n "$1" && -f "$1" ]] || return 0
+    [[ "$(readlink -f "$1")" == "$(readlink -f "$2" 2>/dev/null)" ]] && return 0
+    [[ -e "$2" ]] && return 0
+    mkdir -p "$(dirname "$2")"
+    cp "$1" "$2" && echo "  adopted $3 into the project: $2"
+}
+adotar "$PRIMERS_DADO" "$RAIZ/primers.tsv"       "primers table"
+adotar "$PARAMS_DADO"  "$RAIZ/region_params.tsv" "truncLen table"
+
 # ------------------------------------------------- quais estagios rodar
 # O resultado sai por variavel, nao por stdout, de proposito. Com
 # `i=$(indice X)` a funcao roda num SUBSHELL, e o `exit 1` dela encerraria
