@@ -95,7 +95,7 @@ def main():
             amostra = os.path.basename(f)[:-len("_R1.fastq.gz")]
             alvos.append((amostra, reg, f))
 
-    sys.stderr.write("Contando %d arquivos com %d processos...\n"
+    sys.stderr.write("Counting %d files with %d processes...\n"
                      % (len(alvos), args.jobs))
     tabela = {}   # amostra -> {regiao: n}
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
@@ -109,7 +109,7 @@ def main():
                 sys.stderr.write("  %d/%d\n" % (feitos, len(alvos)))
 
     if not tabela:
-        sys.exit("Nenhum FASTQ encontrado em %s" % split_dir)
+        sys.exit("No FASTQ found in %s" % split_dir)
 
     # ---- relatorio
     cab = ["amostra"] + regioes + ["unknown", "total", "%atribuido"]

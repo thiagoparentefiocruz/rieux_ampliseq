@@ -398,11 +398,27 @@ if rodar_estagio split; then
     # --wait bloqueia ate o array terminar. O driver esta num screen no login,
     # entao bloquear e exatamente o comportamento desejado: os estagios
     # seguintes dependem deste.
+    # `sbatch --wait` devolve o status do array, mas nem todo SLURM o propaga de
+    # forma confiavel, e um array que falha de imediato volta tao rapido quanto
+    # um que nem bloqueou. O que decide nao e o codigo de saida: e se o split
+    # produziu arquivo. Sem esta checagem o estagio seguinte roda sobre um
+    # diretorio vazio e a falha aparece longe de onde nasceu.
     exec_cmd sbatch --wait --partition "$PARTICAO" \
              --array="1-${n_tarefas}%10" \
              --export="ALL,LOTE=$LOTE_SPLIT" \
              --output="$LOGS/split_%A_%a.log" \
-             "$AQUI/bin/split_regions.sh" "$BRUTOS" "$PRIMERS" "$SPLIT" || exit 1
+             "$AQUI/bin/split_regions.sh" "$BRUTOS" "$PRIMERS" "$SPLIT"
+    rc=$?
+    if (( ! SIMULAR )); then
+        n_saida=$(find "$SPLIT/split" -name '*.fastq.gz' 2>/dev/null | head -1 | wc -l)
+        if (( rc != 0 )) || (( n_saida == 0 )); then
+            echo "ERROR: the split array produced no FASTQ (sbatch exit $rc)." >&2
+            echo "       Look at the task logs — they say why:" >&2
+            ls -1t "$LOGS"/split_*.log 2>/dev/null | head -3 | sed 's/^/         /' >&2
+            echo "       Nothing downstream can run without them." >&2
+            exit 1
+        fi
+    fi
     exec_cmd python3 "$AQUI/bin/split_summary.py" "$SPLIT" \
              --minimum "$MIN_READS_REGIAO" || exit 1
     echo
