@@ -150,19 +150,19 @@ def main():
         print("  %-10s %8d" % (r, mediana))
 
     # ---- criterio de aceite
-    print("\n== Criterio de aceite ===========================================")
+    print("\n== Acceptance criterion =========================================")
     if problemas:
         print("  %d sample(s) below 90%% assigned:" % len(problemas))
         for a, f in sorted(problemas, key=lambda x: x[1])[:15]:
             print("     %-20s %.1f%%" % (a, f))
-        print("  Investigue antes de seguir: primer incompleto, contaminacao")
-        print("  de outra biblioteca, ou adaptador residual.")
+        print("  Investigate before going on: incomplete primer, carryover from")
+        print("  another library, or residual adapter.")
     else:
         print("  All samples above 90% assigned.")
 
     if rasas:
         print("\n  %d sample x region pair(s) below %d reads "
-              "(excluidos das samplesheets):" % (len(rasas), args.minimum))
+              "(excluded from the samplesheets):" % (len(rasas), args.minimum))
         for a, r, n in sorted(rasas, key=lambda x: x[2])[:15]:
             print("     %-20s %-10s %d" % (a, r, n))
 
@@ -236,7 +236,7 @@ def main():
             n = escrever(caminho, reg, sorted(tabela))
             print("  %-10s %3d samples  -> %s" % (reg, n, caminho))
 
-    print("\nTabela completa em %s" % os.path.join(args.out_dir, "split_summary.csv"))
+    print("\nFull table at %s" % os.path.join(args.out_dir, "split_summary.csv"))
 
 
 if __name__ == "__main__":

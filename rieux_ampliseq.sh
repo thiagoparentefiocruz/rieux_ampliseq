@@ -104,6 +104,7 @@ MULTIREGION=""
 SIDLE_ENTRADA=""
 SIDLE_REF="silva"
 SIDLE_EXTRA=""
+REVISAO=""
 LOTE_SPLIT=10
 REGIOES=()
 DE=""; ATE=""; SO=""; PULAR=""
@@ -140,6 +141,9 @@ Options
   --work-dir DIR       Nextflow launch directory (default: current)
   --config FILE        cluster profile
   --pipeline X         ampliseq name or path (default: nf-core/ampliseq)
+  --revision TAG       pipeline version to pin (e.g. 2.15.0). Without it,
+                       Nextflow pulls whatever is current on GitHub — which
+                       means two runs months apart are NOT the same pipeline.
   --min-samples N      skip a region with fewer samples than this (default 3)
   --min-reads N        floor of reads per sample PER REGION in split (default 1000)
   --batch-size N       samples per task of the split array (default 10)
@@ -189,6 +193,7 @@ while [[ $# -gt 0 ]]; do
         --work-dir)     DIR_EXEC="${2:?}"; shift 2 ;;
         --config)       CONFIG="${2:?}"; shift 2 ;;
         --pipeline)     PIPE="${2:?}"; shift 2 ;;
+        --revision)     REVISAO="${2:?}"; shift 2 ;;
         --min-samples)  MIN_AMOSTRAS="${2:?}"; shift 2 ;;
         --min-reads)    MIN_READS_REGIAO="${2:?}"; shift 2 ;;
         --batch-size)         LOTE_SPLIT="${2:?}"; shift 2 ;;
@@ -490,8 +495,12 @@ if rodar_estagio run; then
             '$1==r {printf "%s %s %s %s", $2, $3, $4, ($5==""?"-":$5)}' "$PARAMS")
         [[ "$EXTRA" == "-" ]] && EXTRA=""
 
-        ARGS=(run "$PIPE" -profile singularity -c "$CONFIG" -resume
-              --input "$SS" --outdir "$RAIZ/$REG"
+        ARGS=(run "$PIPE" -profile singularity -c "$CONFIG" -resume)
+        # Sem -r, o Nextflow baixa o que estiver corrente no GitHub. Duas
+        # execucoes separadas por meses nao sao o mesmo pipeline, e nada no log
+        # avisa. Fixar a revisao e o que torna a analise reexecutavel.
+        [[ -n "$REVISAO" ]] && ARGS+=(-r "$REVISAO")
+        ARGS+=(--input "$SS" --outdir "$RAIZ/$REG"
               --FW_primer "$FW" --RV_primer "$RV"
               --illumina_novaseq --dada_min_boot 80)
         [[ "$TF" != "0" && "$TR" != "0" ]] && ARGS+=(--trunclenf "$TF" --trunclenr "$TR")
@@ -567,8 +576,9 @@ if rodar_estagio sidle; then
         # globais, e no multi-regiao cada regiao tem o seu. Quem governa o corte
         # e o region_length do proprio regions_multiregion.tsv, escolhido a
         # partir da distribuicao de comprimento observada.
-        ARGS=(run "$PIPE" -profile singularity -c "$CONFIG" -resume
-              --input "$SIDLE_ENTRADA" --multiregion "$MULTIREGION"
+        ARGS=(run "$PIPE" -profile singularity -c "$CONFIG" -resume)
+        [[ -n "$REVISAO" ]] && ARGS+=(-r "$REVISAO")
+        ARGS+=(--input "$SIDLE_ENTRADA" --multiregion "$MULTIREGION"
               --outdir "$RAIZ/sidle" --illumina_novaseq
               --sidle_ref_taxonomy "$SIDLE_REF")
         # shellcheck disable=SC2206
