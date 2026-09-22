@@ -33,15 +33,20 @@ O que o script faz
    do painel (casamento IUPAC, tolerando ate N erros, nunca nas 3 ultimas bases
    do primer — que e' onde a polimerase de fato exige pareamento).
 2. Compara a distribuicao de comprimento extraida da REFERENCIA com a
-   distribuicao dos ASVs OBSERVADOS (comprimento_asv.tsv).
-   - As duas medianas baterem e' a evidencia de que os primers e as bordas
-     estao certos.
-   - Uma diferenca aproximadamente constante denuncia deslocamento de borda, e
-     diz de quantas bases.
-   - Taxa de recuperacao baixa na referencia denuncia primer errado.
-3. Escolhe `region_length` a partir dos dados, nao de chute, e diz quanto se
+   distribuicao dos ASVs OBSERVADOS (comprimento_asv.tsv), pelas PONTAS (p5 e
+   p95), nao pelas medianas — a referencia e a amostra nao tem a mesma
+   composicao, e duas medianas divergem 20 nt com as bordas certas.
+   Deslocamento de borda move a distribuicao inteira; e' isso que se procura.
+3. Separa as causas de recuperacao baixa. Recuperacao NAO e' medida de
+   qualidade do primer: as entradas do SILVA sao truncadas nas pontas, entao as
+   regioes terminais recuperam pouco por construcao. Faltar o primer de um lado
+   so denuncia entrada truncada; par fora da faixa e' que denuncia borda errada.
+4. Mede a cobertura do banco por combinacao de regioes — o Sidle cruza as
+   regioes que receber, e uma regiao com cobertura ruim derruba a intersecao do
+   conjunto todo. Tirar a pior pode render mais referencias utilizaveis.
+5. Escolhe `region_length` a partir dos dados, nao de chute, e diz quanto se
    perde com a escolha.
-4. Grava o regions_multiregion.tsv pronto para o `--multiregion`.
+6. Grava o regions_multiregion.tsv pronto para o `--multiregion`.
 
 Uso
 ---
@@ -182,11 +187,14 @@ def ler_observado(caminho, colab=None, regioes_validas=None):
     with open(caminho) as fh:
         cab = fh.readline().rstrip("\n").split("\t")
         idx = {n: i for i, n in enumerate(cab)}
+        # o coletor novo chama a coluna de 'nome'; a versao anterior chamava
+        # 'colaborador'. Aceitar as duas evita quebrar em tabela antiga.
+        col_nome = "nome" if "nome" in idx else "colaborador"
         for linha in fh:
             c = linha.rstrip("\n").split("\t")
             if not c or len(c) < len(cab):
                 continue
-            if colab and c[idx["colaborador"]] != colab:
+            if colab and col_nome in idx and c[idx[col_nome]] != colab:
                 continue
             reg = c[idx["regiao"]]
             # so as regioes canonicas: as variantes de diagnostico (V1V2_t160_ruim)
@@ -253,6 +261,10 @@ def main():
     ap.add_argument("--perda", type=float, default=5.0,
                     help="%% de ASV que se aceita descartar no corte")
     ap.add_argument("--colab", default=None)
+    ap.add_argument("--sidle-regioes", default=None,
+                    help="grava no regions_multiregion.tsv apenas estas regioes "
+                         "(separadas por virgula). Util quando uma regiao tem "
+                         "cobertura ruim no banco e derruba a intersecao.")
     ap.add_argument("--min-amplicon", type=int, default=80)
     ap.add_argument("--max-amplicon", type=int, default=1200)
     args = ap.parse_args()
@@ -403,6 +415,8 @@ def main():
     # ---- arquivo do --multiregion
     # O Sidle e' 16S com regiao de referencia; ITS1 nao entra e continua trilha
     # separada.
+    so_estas = set(r.strip() for r in args.sidle_regioes.split(",")) \
+        if args.sidle_regioes else None
     with open(args.out, "w") as fh:
         fh.write("region\tregion_length\tFW_primer\tRV_primer\n")
         n = 0
@@ -410,6 +424,8 @@ def main():
             if regiao.startswith("ITS"):
                 continue
             if not alvo:
+                continue
+            if so_estas and regiao not in so_estas:
                 continue
             fh.write("%s\t%d\t%s\t%s\n" % (regiao, alvo, fw, rv))
             n += 1
@@ -440,6 +456,44 @@ def main():
             print("  reconstroi a partir do banco, entao isso limita o que ele pode")
             print("  resolver — e e' motivo para manter o ramo por regiao como")
             print("  denominador, nao como alternativa.")
+
+        # ---- qual COMBINACAO de regioes rende mais
+        #
+        # "Em >= k regioes" nao responde a pergunta pratica, que e' sobre um
+        # conjunto especifico: o Sidle cruza as regioes que a gente entregar.
+        # Uma regiao terminal com cobertura ruim nao so contribui pouco — ela
+        # derruba a intersecao de todo o conjunto. Tirar a pior pode render
+        # mais referencias utilizaveis do que manter as seis.
+        #
+        # Sao 57 combinacoes de 2 a 6 regioes; enumerar todas custa nada e evita
+        # escolher por intuicao.
+        print("\nMelhor combinacao por numero de regioes:")
+        melhor_por_k = []
+        for k in range(2, len(regs16) + 1):
+            melhor = None
+            for combo in itertools.combinations(sorted(regs16), k):
+                inter = set.intersection(*[recuperados[r] for r in combo])
+                if melhor is None or len(inter) > melhor[0]:
+                    melhor = (len(inter), combo)
+            melhor_por_k.append((k, melhor[0], melhor[1]))
+            print("  %d regioes: %6d (%5.1f%%)   %s"
+                  % (k, melhor[0], 100.0 * melhor[0] / total_am,
+                     " ".join(melhor[1])))
+
+        # o ganho de resolucao cresce com o numero de regioes, e a cobertura
+        # cai. O joelho dessa troca e' onde vale parar.
+        sugerida = None
+        for k, n_ref, combo in sorted(melhor_por_k, key=lambda x: -x[0]):
+            if 100.0 * n_ref / total_am >= 50:
+                sugerida = (k, n_ref, combo)
+                break
+        if sugerida:
+            k, n_ref, combo = sugerida
+            print("\n  Maior conjunto que ainda cobre metade do banco: %s"
+                  % " ".join(combo))
+            print("  (%d referencias, %.1f%%). Para usar so estas no Sidle:"
+                  % (n_ref, 100.0 * n_ref / total_am))
+            print("    --sidle-regioes %s" % ",".join(combo))
     print("\nComo ler isto:")
     print("  A coluna 'recup' e' quantas referencias contem a regiao — nao e'")
     print("  medida de qualidade do primer. As entradas do SILVA sao truncadas")
