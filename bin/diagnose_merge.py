@@ -93,15 +93,28 @@ def main():
     # ---------------------------------------------------- retencao por passo
     passos = ["input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim"]
     soma = defaultdict(lambda: defaultdict(int))
+    # Separar controle de amostra nao e detalhe de apresentacao: e o unico
+    # corte que distingue "o parametro esta errado" de "a amostra tem outra
+    # coisa dentro". O controle e uma comunidade conhecida; se ele funde e a
+    # amostra nao, mexer em parametro nao vai resolver.
+    por_tipo = {"sample": defaultdict(lambda: defaultdict(int)),
+                "control": defaultdict(lambda: defaultdict(int))}
     amostras = defaultdict(int)
+    controles = defaultdict(int)
     for l in ler_tsv(f_reads):
         r = l["region"]
-        amostras[r] += 1
+        ctrl = (l.get("control", "no") or "no").strip().lower() in ("yes", "sim", "1", "true")
+        if ctrl:
+            controles[r] += 1
+        else:
+            amostras[r] += 1
         for p in passos:
             try:
-                soma[r][p] += int(float(l.get(p) or 0))
+                v = int(float(l.get(p) or 0))
             except ValueError:
-                pass
+                continue
+            soma[r][p] += v
+            por_tipo["control" if ctrl else "sample"][r][p] += v
 
     # ------------------------------------------------ histograma por regiao
     hist = defaultdict(lambda: defaultdict(int))
@@ -125,24 +138,40 @@ def main():
                 trunc[l["region"]] = (tF, tR)
 
     # ------------------------------------------------------------- relatorio
+    def taxa_fusao(acum, r):
+        """merged / denoised, ou None quando nao ha nada daquele tipo."""
+        s = acum.get(r)
+        if not s:
+            return None
+        den = min(s.get("denoisedF", 0), s.get("denoisedR", 0))
+        if not den:
+            return None
+        return 100.0 * s.get("merged", 0) / den
+
     print("Read retention per region (% of the DADA2 input):\n")
-    print("  %-7s %6s %8s %8s %8s %8s %8s"
-          % ("region", "n", "filter", "denoise", "merge", "chimera", "overall"))
-    print("  " + "-" * 57)
+    print("  %-7s %5s %5s %8s %8s %8s %8s %9s %9s"
+          % ("region", "n", "ctrl", "filter", "denoise", "merge",
+             "chimera", "merge_smp", "merge_ctl"))
+    print("  " + "-" * 74)
     for r in sorted(soma):
         s = soma[r]
         ent = s["input"] or 1
         den = min(s["denoisedF"], s["denoisedR"])
-        print("  %-7s %6d %7.1f%% %7.1f%% %7.1f%% %7.1f%% %7.1f%%"
-              % (r, amostras[r],
+        t_amo = taxa_fusao(por_tipo["sample"], r)
+        t_ctl = taxa_fusao(por_tipo["control"], r)
+        print("  %-7s %5d %5d %7.1f%% %7.1f%% %7.1f%% %7.1f%% %8s %9s"
+              % (r, amostras[r], controles[r],
                  100.0 * s["filtered"] / ent,
                  100.0 * den / (s["filtered"] or 1),
                  100.0 * s["merged"] / (den or 1),
                  100.0 * s["nonchim"] / (s["merged"] or 1),
-                 100.0 * s["nonchim"] / ent))
+                 "-" if t_amo is None else "%.1f%%" % t_amo,
+                 "-" if t_ctl is None else "%.1f%%" % t_ctl))
 
     print("\nEach column is the fraction that SURVIVED that step, not the")
-    print("cumulative total. 'overall' is nonchim / input.")
+    print("cumulative total. The last two split the merge between real")
+    print("samples and controls — the cut that separates a wrong parameter")
+    print("from a sample that contains something the control does not.")
 
     print("\n\nMerge ceiling vs observed ASV length:\n")
     print("  %-7s %7s %7s %8s %6s %6s %6s %6s %7s"
@@ -173,6 +202,30 @@ def main():
         taxa = 100.0 * s.get("merged", 0) / (den or 1)
         if taxa >= args.min_merge:
             continue
+
+        # O controle e uma comunidade conhecida e de comprimento conhecido.
+        # Se ele funde e a amostra nao, o que difere nao e parametro: e o que
+        # esta dentro da amostra. Este teste vem ANTES dos de comprimento
+        # porque nenhum truncLen conserta conteudo.
+        t_amo = taxa_fusao(por_tipo["sample"], r)
+        t_ctl = taxa_fusao(por_tipo["control"], r)
+        if (t_ctl is not None and t_amo is not None
+                and t_ctl >= args.min_merge and t_ctl - t_amo >= 30.0):
+            veredito.append((r, taxa,
+                "NOT A PARAMETER — the controls merge and the samples do not. "
+                "Controls %.1f%%, samples %.1f%%, same region, same truncLen, "
+                "same run. A known community pairs normally here, so the "
+                "pipeline is doing its job; what the samples carry is "
+                "something whose amplicon these reads cannot span. The usual "
+                "cause is off-target amplification: several universal 16S "
+                "pairs also amplify eukaryotic 18S, which is far longer than "
+                "the 16S product and therefore never merges at any truncLen. "
+                "Raising truncLen will not recover it — confirm what the "
+                "unmerged pairs are (vsearch --fastq_mergepairs reports WHY "
+                "each pair failed) before treating this as a loss."
+                % (t_ctl, t_amo)))
+            continue
+
         if teto is None:
             veredito.append((r, taxa,
                              "merge %.1f%% — give --params to test the ceiling"
