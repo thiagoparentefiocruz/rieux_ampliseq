@@ -321,16 +321,32 @@ def modo_lote(args):
                   % (reg, rotulo, nt, 100.0 * ns / nt, p[0], p[1], p[2], p[3]))
             return p
 
-        linha("samples", hist["sample"], n_tot["sample"], n_sem["sample"])
-        linha("controls", hist["control"], n_tot["control"], n_sem["control"])
+        p_amo = linha("samples", hist["sample"],
+                      n_tot["sample"], n_sem["sample"])
+        p_ctl = linha("controls", hist["control"],
+                      n_tot["control"], n_sem["control"])
         p = linha("ALL", juntos, total, n_sem["sample"] + n_sem["control"])
         print("")
         if p is None:
             sem_medida.append(reg)
             continue
+
+        # ALVO: o maior p90 entre os conjuntos, e nao o p90 do bolo.
+        #
+        # O p90 do bolo depende de QUANTAS reads cada grupo contribuiu. No
+        # fabio, o V7V9 tem 89% da massa nas amostras (p90 380) e 11% nos
+        # controles (p90 435): o percentil 90 cai exatamente na fronteira, e
+        # saiu 435 por pouco. Uma proporcao um pouco diferente teria dado 380,
+        # e com 380 o controle volta a fundir zero — o erro que este arquivo
+        # inteiro existe para nao repetir. Cobrir explicitamente os dois
+        # conjuntos tira a decisao das maos da proporcao.
+        alvo = max(x[2] for x in (p_amo, p_ctl, p) if x is not None)
         linhas.append((reg, total,
                        100.0 * (n_sem["sample"] + n_sem["control"]) / total)
-                      + tuple(p))
+                      + tuple(p)
+                      + (p_amo[2] if p_amo else 0,
+                         p_ctl[2] if p_ctl else 0,
+                         alvo))
 
     if sem_medida:
         print("  NOT MEASURED: %s" % " ".join(sem_medida))
@@ -345,6 +361,10 @@ def modo_lote(args):
         print("  Lengths are NET: the phasing block and the primer were located")
         print("  and subtracted read by read. Compare them with truncLenF +")
         print("  truncLenR - 12 directly.")
+    if linhas:
+        print("  The truncLen target is the LARGER of the two p90 values, per")
+        print("  region — not the pooled one, which would depend on how many")
+        print("  reads each group happened to contribute.")
     print("  'no_ovlap' is the share of pairs whose amplicon exceeds what two")
     print("  reads can span. Those are invisible to every length above — and")
     print("  to DADA2. A high value there is off-target amplification, not a")
@@ -359,9 +379,12 @@ def modo_lote(args):
                      "# Inserto LIQUIDO (sem fase, sem primer), em bp.\n"
                      if primers else
                      "# ATENCAO: medido SEM --primers: comprimento BRUTO.\n")
-            fh.write("region\tpairs\tpct_no_overlap\tp50\tp75\tp90\tp95\n")
+            fh.write("# 'target' = maior p90 entre amostras e controles: e a\n"
+                     "# coluna que o quality_profile.py usa por padrao.\n")
+            fh.write("region\tpairs\tpct_no_overlap\tp50\tp75\tp90\tp95"
+                     "\tp90_samples\tp90_controls\ttarget\n")
             for l in linhas:
-                fh.write("%s\t%d\t%.2f\t%d\t%d\t%d\t%d\n" % l)
+                fh.write("%s\t%d\t%.2f\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n" % l)
         print("\nWrote %s" % args.out)
     return 0
 

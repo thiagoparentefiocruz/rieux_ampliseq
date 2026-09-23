@@ -111,7 +111,13 @@ next time. That loop left V7V9 with a 415 bp ceiling for a ~432 bp amplicon:
 all four controls merged **zero** reads and the region scored 6.6%. With the
 ceiling measured instead of inherited, the same region merges 99.9%. The
 target is the **p90** of the measured insert, not the median, because aiming
-at the median leaves half the community above the ceiling.
+at the median leaves half the community above the ceiling — and it is the
+**larger p90 between the samples and the controls**, not the pooled one. The
+pooled percentile depends on how many reads each group happened to contribute:
+in one project the controls were 11% of the V7V9 reads and the 90th percentile
+landed exactly on the boundary between the two groups. A slightly different
+proportion would have picked the samples' value and left the controls merging
+nothing again.
 
 From scratch, one command:
 

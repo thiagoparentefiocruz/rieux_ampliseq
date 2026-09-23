@@ -183,10 +183,12 @@ def main():
     ap.add_argument("--inserts", default=None,
                     help="inserts.tsv from check_overlap.py --split: the insert "
                          "measured in the READS, uncensored. Preferred over --asv")
-    ap.add_argument("--insert-column", default="p90",
-                    help="which percentile of the measured insert to aim at "
-                         "(default p90: the median leaves half the community "
-                         "above the ceiling)")
+    ap.add_argument("--insert-column", default="target",
+                    help="which column of inserts.tsv to aim at (default "
+                         "'target': the larger p90 between samples and "
+                         "controls. The median leaves half the community above "
+                         "the ceiling; the pooled p90 depends on how many reads "
+                         "each group contributed)")
     ap.add_argument("--out", default=None,
                     help="write the chosen truncLen values as region_params.tsv")
     args = ap.parse_args()
