@@ -50,6 +50,7 @@ import sys
 from collections import defaultdict
 
 COMPLEMENTO = str.maketrans("ACGTNacgtn", "TGCANtgcan")
+Q_MIN = chr(33 + 20)      # Q20: piso para aceitar uma janela como semente
 
 IUPAC = {
     "A": "A", "C": "C", "G": "G", "T": "T",
@@ -67,20 +68,64 @@ def regex_primer(p):
     return re.compile("".join(IUPAC.get(c, c) for c in p.strip().upper()))
 
 
-def le_fastq(caminho, limite):
-    """Devolve ate `limite` sequencias. Aceita .gz ou texto."""
+def le_fastq(caminho, limite, com_qual=False):
+    """
+    Devolve ate `limite` sequencias (ou pares (seq, qual) com com_qual).
+
+    A qualidade nao e enfeite: e ela que diz de onde a semente pode sair.
+    """
     abrir = gzip.open if caminho.endswith(".gz") else open
-    seqs = []
+    seqs, quals = [], []
     with abrir(caminho, "rt") as fh:
         for i, linha in enumerate(fh):
             if i % 4 == 1:
                 seqs.append(linha.strip().upper())
-                if len(seqs) >= limite:
+            elif com_qual and i % 4 == 3:
+                quals.append(linha.rstrip("\n"))
+                if len(quals) >= limite:
                     break
+            if not com_qual and len(seqs) >= limite:
+                break
+    if com_qual:
+        n = min(len(seqs), len(quals))
+        return list(zip(seqs[:n], quals[:n]))
     return seqs
 
 
-def sobreposicao(r1, r2rc, min_ov, max_dif_frac, semente=16):
+def posicoes_semente(l2, q2rc, semente, maximo=10):
+    """
+    Onde tirar a semente de dentro de r2rc.
+
+    ESTE E O PONTO QUE JA ERRAMOS UMA VEZ. A versao anterior usava sempre o
+    INICIO de r2rc — isto e, o FIM da read R2, que e a parte de pior qualidade
+    de toda a corrida. Numa amostra com cauda ruim, as quatro sementes caiam
+    todas em cima de erro, o par era declarado "sem sobreposicao", e o script
+    respondia 92% de nao-sobreposicao numa regiao que o DADA2 fundia a 96%. O
+    DADA2 nao caia nessa porque ele TRUNCA a cauda antes de parear.
+
+    Duas mudancas: espalhar as sementes pela read inteira (uma semente na
+    posicao p exige sobreposicao >= p + semente, entao sobreposicao grande
+    permite semente mais funda, que e onde a qualidade e melhor), e, quando a
+    qualidade esta disponivel, so aceitar janela sem base ruim.
+    """
+    limite = max(0, min(l2 - semente, 240))
+    passo = 8
+    candidatas = []
+    for p in range(0, limite + 1, passo):
+        if q2rc is not None:
+            janela = q2rc[p:p + semente]
+            if janela and min(janela) < Q_MIN:
+                continue
+        candidatas.append(p)
+        if len(candidatas) >= maximo:
+            break
+    if not candidatas:
+        # nenhuma janela limpa: tenta assim mesmo, espalhado
+        candidatas = list(range(0, limite + 1, max(1, limite // 6 or 1)))[:maximo]
+    return candidatas
+
+
+def sobreposicao(r1, r2rc, min_ov, max_dif_frac, semente=16, q2rc=None):
     """
     Procura o encaixe de r2rc na cauda de r1.
 
@@ -88,13 +133,12 @@ def sobreposicao(r1, r2rc, min_ov, max_dif_frac, semente=16):
 
     A busca e por semente e nao por forca bruta: comparar todas as
     sobreposicoes possiveis de todos os pares custa O(n x L^2) e nao termina
-    em tempo util em Python. Uma semente exata de 16 bases tirada do inicio de
-    r2rc, procurada dentro de r1, ja da o deslocamento candidato; so ele e
-    verificado. Como a semente pode cair em cima de um erro de sequenciamento,
-    tentamos algumas posicoes diferentes antes de desistir.
+    em tempo util em Python. Uma semente exata de 16 bases, procurada dentro
+    de r1, ja da o deslocamento candidato; so ele e verificado. De onde tirar
+    a semente esta em posicoes_semente(), e nao e detalhe.
     """
     l1, l2 = len(r1), len(r2rc)
-    for inicio in (0, 20, 40, 60):
+    for inicio in posicoes_semente(l2, q2rc, semente):
         if inicio + semente > l2:
             break
         chave = r2rc[inicio:inicio + semente]
@@ -143,16 +187,17 @@ def desconto(read, rx, janela=45):
     return m.end() if m else None
 
 
-def mede_par(r1, r2, min_ov, max_dif, rxF=None, rxR=None):
+def mede_par(r1, r2, min_ov, max_dif, rxF=None, rxR=None, q2=None):
     """
     Devolve (bruto, liquido_ou_None, motivo).
 
     motivo: 'ok', 'ruido', 'sem_encaixe'
     """
     r2rc = revcomp(r2)
-    res = sobreposicao(r1, r2rc, min_ov, max_dif)
+    q2rc = q2[::-1] if q2 else None
+    res = sobreposicao(r1, r2rc, min_ov, max_dif, q2rc=q2rc)
     if not res:
-        if sobreposicao(r1, r2rc, min_ov, 0.35):
+        if sobreposicao(r1, r2rc, min_ov, 0.35, q2rc=q2rc):
             return (None, None, "ruido")
         return (None, None, "sem_encaixe")
     bruto = res[0]
@@ -243,11 +288,12 @@ def modo_lote(args):
             nome = re.sub(r"_R1.*$", "", f1)
             tipo = "control" if rx_ctrl.search(nome) else "sample"
             s1 = le_fastq(c1, args.reads)
-            s2 = le_fastq(c2, args.reads)
+            s2 = le_fastq(c2, args.reads, com_qual=True)
             for i in range(min(len(s1), len(s2))):
                 n_tot[tipo] += 1
                 bruto, liquido, motivo = mede_par(
-                    s1[i], s2[i], args.min_overlap, args.max_diff, rxF, rxR)
+                    s1[i], s2[i][0], args.min_overlap, args.max_diff,
+                    rxF, rxR, q2=s2[i][1])
                 if motivo == "sem_encaixe":
                     n_sem[tipo] += 1
                 elif liquido is not None and liquido > 0:
@@ -322,7 +368,7 @@ def modo_lote(args):
 
 def modo_par(args):
     s1 = le_fastq(args.r1, args.reads)
-    s2 = le_fastq(args.r2, args.reads)
+    s2 = le_fastq(args.r2, args.reads, com_qual=True)
     n = min(len(s1), len(s2))
     if not n:
         sys.exit("ERROR: no reads read. Check the paths.")
@@ -339,7 +385,8 @@ def modo_par(args):
     n_ok = n_dif = n_sem = 0
     for i in range(n):
         r1 = s1[i]
-        bruto, _, motivo = mede_par(r1, s2[i], args.min_overlap, args.max_diff)
+        bruto, _, motivo = mede_par(r1, s2[i][0], args.min_overlap,
+                                    args.max_diff, q2=s2[i][1])
         if motivo == "ok":
             hist[bruto] += 1
             n_ok += 1
@@ -375,12 +422,12 @@ def modo_par(args):
         print("  them read by read and reports the net insert.")
         print("")
 
-    limite = len(s1[0]) + len(s2[0]) - args.min_overlap
+    limite = len(s1[0]) + len(s2[0][0]) - args.min_overlap
     if n_sem:
         print("The %.1f%% with no overlap have an amplicon longer than %d bp"
               % (100.0 * n_sem / n, limite))
         print("(read lengths %d + %d minus the %d bp minimum overlap). No"
-              % (len(s1[0]), len(s2[0]), args.min_overlap))
+              % (len(s1[0]), len(s2[0][0]), args.min_overlap))
         print("truncLen reaches that: truncating only makes the reads shorter.")
         print("")
 
