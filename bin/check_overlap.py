@@ -176,6 +176,13 @@ def main():
         print("  This is the UNCENSORED distribution — measured from the reads")
         print("  themselves, not from what survived DADA2.")
         print("")
+        print("  Careful: these lengths include whatever the reads still")
+        print("  carry. Run on the output of a split done with cutadapt")
+        print("  --action=none, they still hold the phasing block and both")
+        print("  primers (~40-55 bp here), which ampliseq's own cutadapt")
+        print("  removes later. Subtract that before comparing with ASV")
+        print("  lengths, or the same molecule will look like two.")
+        print("")
 
     limite = len(s1[0]) + len(s2[0]) - args.min_overlap
     if n_sem:
