@@ -388,13 +388,18 @@ def main():
     s_ret, s_cls, s_abd, s_len, s_amo, s_prev = [], [], [], [], [], []
     focos = []
 
+    n_regioes = 0
     for nome, dirbase in conjuntos:
+        if not os.path.isdir(dirbase):
+            sys.exit("ERROR: %s does not exist (resolved to %s)"
+                     % (dirbase, os.path.abspath(dirbase)))
         regs = args.regions if args.regions else regioes_em(
             dirbase, args.with_variants, painel)
         for regiao in regs:
             d = os.path.join(dirbase, regiao)
             if not os.path.isdir(d):
                 continue
+            n_regioes += 1
             n1 = retencao(d, nome, regiao, s_ret)
             n2 = taxonomia(d, nome, regiao, s_cls, s_abd, s_amo, s_prev,
                            args.min_reads, rx, focos)
@@ -402,6 +407,22 @@ def main():
             marca = "" if n2 else "   (no taxonomy — incomplete run)"
             print("  %-12s %-12s %3d samples  %5d ASVs%s"
                   % (nome, regiao, n1, n2, marca))
+
+    # Nenhuma regiao encontrada nao e "resultado vazio": e caminho errado, ou
+    # uma rodada que nao chegou a produzir nada. Escrever seis arquivos de
+    # cabecalho e terminar com a linha do R faz o vazio passar por resultado —
+    # e o R so descobre isso depois. Melhor falhar aqui, dizendo onde se olhou.
+    if n_regioes == 0:
+        sys.stderr.write(
+            "ERROR: no region directory found under:\n")
+        for nome, dirbase in conjuntos:
+            sys.stderr.write("      %s\n" % os.path.abspath(dirbase))
+        if painel:
+            sys.stderr.write("      expected one directory per region: %s\n"
+                             % " ".join(sorted(painel)))
+        sys.stderr.write("      Nothing was written. Check the path — a relative\n"
+                         "      one is resolved from the current directory.\n")
+        sys.exit(1)
 
     os.makedirs(out, exist_ok=True)
 

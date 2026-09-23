@@ -345,6 +345,23 @@ precisa() {   # precisa <caminho> <descricao> <estagio que produz>
     exit 1
 }
 
+# Um --outdir relativo e resolvido a partir do diretorio ATUAL, e rodar o
+# comando de dentro do proprio projeto produz <projeto>/<projeto> — um diretorio
+# novo, vazio, com o nome certo. Os estagios abaixo consomem o que os anteriores
+# deixaram no projeto; se o projeto acabou de nascer, nao ha o que consumir, e
+# seguir em frente so produz saida vazia com cara de resultado.
+if [[ ! -d "$RAIZ" ]]; then
+    case "${ESTAGIOS[$INI]}" in
+        run|sidle|collect)
+            echo "ERROR: the project directory does not exist:" >&2
+            echo "      $RAIZ" >&2
+            echo "      Stage '${ESTAGIOS[$INI]}' reads what the earlier stages left there." >&2
+            echo "      A relative --outdir is resolved from the current directory —" >&2
+            echo "      check where you are ($PWD)." >&2
+            exit 1 ;;
+    esac
+fi
+
 mkdir -p "$RAIZ" "$LOGS"
 
 echo "Project    : $PROJETO"
