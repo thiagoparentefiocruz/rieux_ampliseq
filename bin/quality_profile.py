@@ -206,6 +206,12 @@ def main():
 
         inserto = INSERTO.get(reg)
         if inserto is None:
+            # ITS nao tem comprimento fixo, entao nao se trunca — mas a regiao
+            # ENTRA na tabela mesmo assim, com truncLen 0. Ficar de fora nao
+            # significava "sem truncagem": significava sumir. O estagio `run`
+            # percorre as regioes desta tabela, entao o ITS1 do painel
+            # 16S/ITS simplesmente nao era analisado, sem uma linha de aviso.
+            linhas_cfg.append((reg, 0, 0))
             print("%-7s %6s %6s %7s %7s %9d  %s"
                   % (reg, "-", "-", "variavel", "-", total,
                      "ITS: do not truncate (--illumina_pe_its)"))
@@ -269,8 +275,10 @@ def main():
 
     print("\nampliseq parameters, per region:")
     for reg, cF, cR in linhas_cfg:
-        print("  %-7s --trunclenf %d --trunclenr %d" % (reg, cF, cR))
-    print("\n  (ITS1: use --illumina_pe_its --cut_its its1, no trunclen)")
+        if reg.upper().startswith("ITS"):
+            print("  %-7s --illumina_pe_its --cut_its its1  (no trunclen)" % reg)
+        else:
+            print("  %-7s --trunclenf %d --trunclenr %d" % (reg, cF, cR))
 
     # Escrever o TSV, e nao so imprimir, e o que permite este passo ser um
     # ESTAGIO do wrapper em vez de uma consulta que alguem transcreve na mao.

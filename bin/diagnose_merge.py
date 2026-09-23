@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""
+diagnose_merge.py — por que uma regiao perdeu reads, e em que passo.
+
+    bin/diagnose_merge.py --reports <projeto>/final_reports \
+                          --params  <projeto>/region_params.tsv
+
+Uma regiao com fusao baixa tem poucas causas possiveis, e elas pedem
+correcoes opostas. Olhar so a porcentagem final nao distingue:
+
+  - o filtro de qualidade comeu as reads          -> truncar mais curto
+  - a fusao nao fecha porque o truncLen e curto   -> truncar mais longo
+  - a quimera comeu os ASVs                       -> nao e truncagem
+
+O sinal que separa o segundo caso dos outros esta no comprimento dos ASVs.
+O DADA2 so funde um par quando truncLenF + truncLenR - inserto >= minOverlap
+(12 por padrao). Entao existe um TETO de comprimento fusionavel:
+
+    teto = truncLenF + truncLenR - 12
+
+Amplicon mais longo que isso nao aparece na saida — nao porque nao exista,
+mas porque nao teve como fundir. O histograma de comprimento denuncia: em vez
+de cair suave, ele bate numa parede e para. Uma pilha de ASVs encostada no
+teto, com fusao baixa, e diagnostico de truncagem curta demais.
+
+Cuidado de leitura que vale registrar: o asv_length.tsv so contem o que
+fundiu. A distribuicao observada ja e a distribuicao CENSURADA pelo teto, e
+por isso ela nunca vai "mostrar" o que ficou de fora. Quem estima o que
+faltou e o PCR in-silico do validate_sidle_regions.py, contra o banco.
+"""
+import argparse
+import os
+import sys
+from collections import defaultdict
+
+SOBREPOSICAO_DADA2 = 12   # minOverlap padrao do DADA2
+PERTO_DO_TETO = 3         # bp: o que conta como "encostado na parede"
+
+
+def ler_tsv(caminho):
+    """Linhas como dicionarios, ignorando comentarios e linhas curtas."""
+    linhas = []
+    with open(caminho) as fh:
+        cab = None
+        for linha in fh:
+            if linha.startswith("#") or not linha.strip():
+                continue
+            c = linha.rstrip("\n").split("\t")
+            if cab is None:
+                cab = c
+                continue
+            if len(c) < len(cab):
+                c += [""] * (len(cab) - len(c))
+            linhas.append(dict(zip(cab, c)))
+    return linhas
+
+
+def percentil(hist, p):
+    """hist: {comprimento: n}. Devolve o percentil p (0-100)."""
+    total = sum(hist.values())
+    if not total:
+        return 0
+    alvo = total * p / 100.0
+    acum = 0
+    for v in sorted(hist):
+        acum += hist[v]
+        if acum >= alvo:
+            return v
+    return max(hist)
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Localize where each region lost its reads.")
+    ap.add_argument("--reports", required=True,
+                    help="final_reports/ directory written by collect_metrics.py")
+    ap.add_argument("--params", default=None,
+                    help="region_params.tsv (truncLen per region). Without it, "
+                         "the merge ceiling cannot be computed.")
+    ap.add_argument("--min-merge", type=float, default=85.0,
+                    help="merge rate below which a region is reported (default 85)")
+    ap.add_argument("--overlap", type=int, default=SOBREPOSICAO_DADA2,
+                    help="DADA2 minOverlap (default 12)")
+    args = ap.parse_args()
+
+    f_reads = os.path.join(args.reports, "reads_per_region.tsv")
+    f_len = os.path.join(args.reports, "asv_length.tsv")
+    for f in (f_reads, f_len):
+        if not os.path.isfile(f):
+            sys.exit("ERROR: %s not found — run the 'collect' stage first." % f)
+
+    # ---------------------------------------------------- retencao por passo
+    passos = ["input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim"]
+    soma = defaultdict(lambda: defaultdict(int))
+    amostras = defaultdict(int)
+    for l in ler_tsv(f_reads):
+        r = l["region"]
+        amostras[r] += 1
+        for p in passos:
+            try:
+                soma[r][p] += int(float(l.get(p) or 0))
+            except ValueError:
+                pass
+
+    # ------------------------------------------------ histograma por regiao
+    hist = defaultdict(lambda: defaultdict(int))
+    for l in ler_tsv(f_len):
+        try:
+            hist[l["region"]][int(l["length"])] += int(l["n_asv"])
+        except (ValueError, KeyError):
+            pass
+
+    # ------------------------------------------------------------ truncLens
+    trunc = {}
+    if args.params:
+        if not os.path.isfile(args.params):
+            sys.exit("ERROR: %s not found" % args.params)
+        for l in ler_tsv(args.params):
+            try:
+                tF, tR = int(l["trunclenf"]), int(l["trunclenr"])
+            except (ValueError, KeyError):
+                continue
+            if tF and tR:
+                trunc[l["region"]] = (tF, tR)
+
+    # ------------------------------------------------------------- relatorio
+    print("Read retention per region (% of the DADA2 input):\n")
+    print("  %-7s %6s %8s %8s %8s %8s %8s"
+          % ("region", "n", "filter", "denoise", "merge", "chimera", "overall"))
+    print("  " + "-" * 57)
+    for r in sorted(soma):
+        s = soma[r]
+        ent = s["input"] or 1
+        den = min(s["denoisedF"], s["denoisedR"])
+        print("  %-7s %6d %7.1f%% %7.1f%% %7.1f%% %7.1f%% %7.1f%%"
+              % (r, amostras[r],
+                 100.0 * s["filtered"] / ent,
+                 100.0 * den / (s["filtered"] or 1),
+                 100.0 * s["merged"] / (den or 1),
+                 100.0 * s["nonchim"] / (s["merged"] or 1),
+                 100.0 * s["nonchim"] / ent))
+
+    print("\nEach column is the fraction that SURVIVED that step, not the")
+    print("cumulative total. 'overall' is nonchim / input.")
+
+    print("\n\nMerge ceiling vs observed ASV length:\n")
+    print("  %-7s %7s %7s %8s %7s %7s %7s %6s"
+          % ("region", "truncF", "truncR", "ceiling", "p50", "p95", "max", "at_wall"))
+    print("  " + "-" * 62)
+    veredito = []
+    for r in sorted(hist):
+        h = hist[r]
+        p50, p95, mx = percentil(h, 50), percentil(h, 95), max(h) if h else 0
+        if r in trunc:
+            tF, tR = trunc[r]
+            teto = tF + tR - args.overlap
+            total = sum(h.values()) or 1
+            parede = sum(n for v, n in h.items() if v >= teto - PERTO_DO_TETO)
+            pct_parede = 100.0 * parede / total
+            print("  %-7s %7d %7d %8d %7d %7d %7d %5.1f%%"
+                  % (r, tF, tR, teto, p50, p95, mx, pct_parede))
+        else:
+            teto = pct_parede = None
+            print("  %-7s %7s %7s %8s %7d %7d %7d %6s"
+                  % (r, "-", "-", "-", p50, p95, mx, "-"))
+
+        s = soma.get(r, {})
+        den = min(s.get("denoisedF", 0), s.get("denoisedR", 0))
+        taxa = 100.0 * s.get("merged", 0) / (den or 1)
+        if taxa >= args.min_merge:
+            continue
+        if teto is None:
+            veredito.append((r, taxa,
+                             "merge %.1f%% — give --params to test the ceiling"
+                             % taxa))
+        elif mx >= teto - PERTO_DO_TETO or pct_parede >= 10.0:
+            veredito.append((r, taxa,
+                "CAPPED BY truncLen. The histogram stops at the ceiling (%d bp) "
+                "with %.1f%% of the ASVs piled against it, and only %.1f%% of "
+                "the pairs merged. Anything longer than %d bp had no way to "
+                "merge, so the observed lengths cannot show you what was lost. "
+                "Raise truncLenF+truncLenR (read length permitting) and "
+                "re-run, or accept that this region only sees its short end."
+                % (teto, pct_parede, taxa, teto)))
+        else:
+            veredito.append((r, taxa,
+                "merge %.1f%%, but the lengths stop well below the ceiling "
+                "(%d bp observed vs %d bp allowed). Truncation is NOT the "
+                "binding constraint here — look at the filter and denoise "
+                "columns above, at primer carryover, or at the region simply "
+                "not amplifying in these samples."
+                % (taxa, mx, teto)))
+
+    if not veredito:
+        print("\nEvery region merged above %.0f%%. Nothing to diagnose."
+              % args.min_merge)
+        return 0
+
+    print("\n\n" + "=" * 70)
+    print("REGIONS BELOW %.0f%% MERGE" % args.min_merge)
+    print("=" * 70)
+    for r, taxa, texto in sorted(veredito, key=lambda x: x[1]):
+        print("\n%s  (merge %.1f%%)" % (r, taxa))
+        linha = ""
+        for palavra in texto.split():
+            if len(linha) + len(palavra) + 1 > 68:
+                print("  " + linha)
+                linha = palavra
+            else:
+                linha = (linha + " " + palavra).strip()
+        if linha:
+            print("  " + linha)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        # sair de `| head` sem despejar traceback na cara de quem so queria
+        # ver as primeiras linhas
+        try:
+            sys.stdout.close()
+        finally:
+            sys.exit(0)

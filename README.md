@@ -266,6 +266,7 @@ fat partition — with SILVA they are the only genuinely memory-hungry step.
 | `collect_metrics.py` | builds `final_reports/` |
 | `evaluate_run.py` | per-run QC report |
 | `quality_profile.py` | quality profiles, for choosing truncation |
+| `diagnose_merge.py` | where a region lost its reads, and whether truncLen is the cap |
 
 ### One gotcha worth stating out loud
 
