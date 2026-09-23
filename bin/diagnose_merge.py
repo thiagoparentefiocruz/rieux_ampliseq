@@ -35,6 +35,7 @@ from collections import defaultdict
 
 SOBREPOSICAO_DADA2 = 12   # minOverlap padrao do DADA2
 PERTO_DO_TETO = 3         # bp: o que conta como "encostado na parede"
+LARGURA_ESTREITA = 12     # bp: p95-p5 abaixo disso nao e distribuicao, e fatia
 
 
 def ler_tsv(caminho):
@@ -144,25 +145,28 @@ def main():
     print("cumulative total. 'overall' is nonchim / input.")
 
     print("\n\nMerge ceiling vs observed ASV length:\n")
-    print("  %-7s %7s %7s %8s %7s %7s %7s %6s"
-          % ("region", "truncF", "truncR", "ceiling", "p50", "p95", "max", "at_wall"))
-    print("  " + "-" * 62)
+    print("  %-7s %7s %7s %8s %6s %6s %6s %6s %7s"
+          % ("region", "truncF", "truncR", "ceiling",
+             "p5", "p50", "p95", "max", "at_wall"))
+    print("  " + "-" * 66)
     veredito = []
     for r in sorted(hist):
         h = hist[r]
-        p50, p95, mx = percentil(h, 50), percentil(h, 95), max(h) if h else 0
+        p5, p50 = percentil(h, 5), percentil(h, 50)
+        p95, mx = percentil(h, 95), max(h) if h else 0
+        largura = p95 - p5          # largura da distribuicao QUE SOBREVIVEU
         if r in trunc:
             tF, tR = trunc[r]
             teto = tF + tR - args.overlap
             total = sum(h.values()) or 1
             parede = sum(n for v, n in h.items() if v >= teto - PERTO_DO_TETO)
             pct_parede = 100.0 * parede / total
-            print("  %-7s %7d %7d %8d %7d %7d %7d %5.1f%%"
-                  % (r, tF, tR, teto, p50, p95, mx, pct_parede))
+            print("  %-7s %7d %7d %8d %6d %6d %6d %6d %6.1f%%"
+                  % (r, tF, tR, teto, p5, p50, p95, mx, pct_parede))
         else:
             teto = pct_parede = None
-            print("  %-7s %7s %7s %8s %7d %7d %7d %6s"
-                  % (r, "-", "-", "-", p50, p95, mx, "-"))
+            print("  %-7s %7s %7s %8s %6d %6d %6d %6d %7s"
+                  % (r, "-", "-", "-", p5, p50, p95, mx, "-"))
 
         s = soma.get(r, {})
         den = min(s.get("denoisedF", 0), s.get("denoisedR", 0))
@@ -175,21 +179,40 @@ def main():
                              % taxa))
         elif mx >= teto - PERTO_DO_TETO or pct_parede >= 10.0:
             veredito.append((r, taxa,
-                "CAPPED BY truncLen. The histogram stops at the ceiling (%d bp) "
-                "with %.1f%% of the ASVs piled against it, and only %.1f%% of "
-                "the pairs merged. Anything longer than %d bp had no way to "
-                "merge, so the observed lengths cannot show you what was lost. "
-                "Raise truncLenF+truncLenR (read length permitting) and "
-                "re-run, or accept that this region only sees its short end."
+                "CAPPED BY truncLen, with a pile-up at the wall. The histogram "
+                "stops at the ceiling (%d bp) with %.1f%% of the ASVs against "
+                "it, and only %.1f%% of the pairs merged. Anything longer than "
+                "%d bp had no way to merge. Raise truncLenF+truncLenR (read "
+                "length permitting) and re-run, or accept that this region "
+                "only sees its short end."
                 % (teto, pct_parede, taxa, teto)))
+        elif largura <= LARGURA_ESTREITA:
+            # Sem pilha na parede, mas o que sobrou e uma FATIA de comprimento,
+            # nao uma distribuicao. Uma comunidade cujo comprimento e bimodal
+            # some inteira acima do teto e nao deixa pilha nenhuma: some o
+            # modo longo, fica o curto, e o histograma parece bem-comportado.
+            # Ausencia de parede NAO e ausencia de censura.
+            veredito.append((r, taxa,
+                "INCONCLUSIVE from the lengths alone, and the shape is "
+                "suspicious: only %.1f%% of the pairs merged, and everything "
+                "that did merge sits in a %d bp window (p5 %d, p95 %d) well "
+                "below the %d bp ceiling. A community whose lengths are "
+                "bimodal disappears above the ceiling WITHOUT leaving a "
+                "pile-up — the long mode vanishes and the short one looks "
+                "tidy. Two ways to settle it: in-silico PCR against the "
+                "reference (validate_sidle_regions.py), which gives the "
+                "UNCENSORED expected distribution, and one test run of this "
+                "region at the maximum truncLen the read length allows. If "
+                "merge jumps, the ceiling was binding after all."
+                % (taxa, largura, p5, p95, teto)))
         else:
             veredito.append((r, taxa,
-                "merge %.1f%%, but the lengths stop well below the ceiling "
-                "(%d bp observed vs %d bp allowed). Truncation is NOT the "
-                "binding constraint here — look at the filter and denoise "
-                "columns above, at primer carryover, or at the region simply "
-                "not amplifying in these samples."
-                % (taxa, mx, teto)))
+                "merge %.1f%%, and the surviving lengths span %d bp (p5 %d, "
+                "p95 %d, max %d) with room below the %d bp ceiling. "
+                "Truncation does not look like the binding constraint — look "
+                "at the filter and denoise columns above, at primer "
+                "carryover, or at the region simply not amplifying here."
+                % (taxa, largura, p5, p95, mx, teto)))
 
     if not veredito:
         print("\nEvery region merged above %.0f%%. Nothing to diagnose."
