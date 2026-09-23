@@ -488,7 +488,8 @@ if rodar_estagio profile; then
         INSERTOS="$RAIZ/inserts.tsv"
         exec_cmd python3 "$AQUI/bin/check_overlap.py" \
                  --split "$SPLIT/split" --primers "$PRIMERS" \
-                 --out "$INSERTOS" --samples 6 || exit 1
+                 --controls "$CONTROLES" \
+                 --out "$INSERTOS" --samples 12 || exit 1
         echo
         ARGS_PERFIL=()
         if [[ -s "$INSERTOS" ]] || (( SIMULAR )); then

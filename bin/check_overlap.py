@@ -195,21 +195,42 @@ def modo_lote(args):
             "(phasing block and primers included).\n"
             "         They are NOT comparable with truncLen.\n\n")
 
+    rx_ctrl = re.compile(args.controls)
     regioes = sorted(d for d in os.listdir(args.split)
                      if os.path.isdir(os.path.join(args.split, d))
                      and d != "unknown" and not d.startswith("."))
     linhas = []
-    print("  %-7s %8s %9s %7s %7s %7s %7s"
-          % ("region", "pairs", "no_ovlap", "p50", "p75", "p90", "p95"))
-    print("  " + "-" * 56)
+    sem_medida = []
+    print("  %-7s %-8s %8s %9s %7s %7s %7s %7s"
+          % ("region", "set", "pairs", "no_ovlap", "p50", "p75", "p90", "p95"))
+    print("  " + "-" * 66)
     for reg in regioes:
         d = os.path.join(args.split, reg)
         arquivos = sorted(f for f in os.listdir(d) if "_R1" in f
                           and f.endswith(".fastq.gz"))
-        if args.samples:
-            arquivos = arquivos[:args.samples]
-        hist = defaultdict(int)
-        n_tot = n_sem = 0
+        if args.samples and len(arquivos) > args.samples:
+            # ESPACADO, nao os primeiros N. Pegar os primeiros em ordem
+            # alfabetica escolhe um subconjunto com cara de amostragem e que
+            # nao e: numa corrida cujas amostras comecam com H e cujos
+            # controles comecam com S, `[:6]` devolve seis amostras e zero
+            # controles — e foi exatamente o que aconteceu, dando uma tabela
+            # que descrevia so metade do experimento.
+            ult = len(arquivos) - 1
+            if args.samples == 1:
+                idx = [0]
+            else:
+                # inclui o PRIMEIRO e o ULTIMO: controles costumam cair numa
+                # das pontas da ordem alfabetica, e e exatamente a ponta que
+                # nao pode faltar.
+                idx = sorted(set(
+                    int(round(i * ult / float(args.samples - 1)))
+                    for i in range(args.samples)))
+            arquivos = [arquivos[i] for i in idx]
+
+        # hist[tipo] e n[tipo], com tipo em {"sample", "control"}
+        hist = {"sample": defaultdict(int), "control": defaultdict(int)}
+        n_tot = {"sample": 0, "control": 0}
+        n_sem = {"sample": 0, "control": 0}
         rxF = rxR = None
         if reg in primers:
             rxF, rxR = (regex_primer(primers[reg][0]),
@@ -219,26 +240,61 @@ def modo_lote(args):
             c2 = os.path.join(d, f1.replace("_R1", "_R2"))
             if not os.path.isfile(c2):
                 continue
+            nome = re.sub(r"_R1.*$", "", f1)
+            tipo = "control" if rx_ctrl.search(nome) else "sample"
             s1 = le_fastq(c1, args.reads)
             s2 = le_fastq(c2, args.reads)
             for i in range(min(len(s1), len(s2))):
-                n_tot += 1
+                n_tot[tipo] += 1
                 bruto, liquido, motivo = mede_par(
                     s1[i], s2[i], args.min_overlap, args.max_diff, rxF, rxR)
                 if motivo == "sem_encaixe":
-                    n_sem += 1
+                    n_sem[tipo] += 1
                 elif liquido is not None and liquido > 0:
-                    hist[liquido] += 1
+                    hist[tipo][liquido] += 1
                 elif bruto is not None and not primers:
-                    hist[bruto] += 1
-        if not n_tot:
-            continue
-        p = [percentil(hist, x) for x in (50, 75, 90, 95)]
-        print("  %-7s %8d %8.1f%% %7d %7d %7d %7d"
-              % (reg, n_tot, 100.0 * n_sem / n_tot, p[0], p[1], p[2], p[3]))
-        linhas.append((reg, n_tot, 100.0 * n_sem / n_tot) + tuple(p))
+                    hist[tipo][bruto] += 1
 
-    print("")
+        total = n_tot["sample"] + n_tot["control"]
+        if not total:
+            continue
+        juntos = defaultdict(int)
+        for tipo in ("sample", "control"):
+            for v, c in hist[tipo].items():
+                juntos[v] += c
+
+        def linha(rotulo, h, nt, ns):
+            if not nt:
+                return None
+            if not h:
+                print("  %-7s %-8s %8d %8.1f%% %7s %7s %7s %7s"
+                      % (reg, rotulo, nt, 100.0 * ns / nt, "-", "-", "-", "-"))
+                return None
+            p = [percentil(h, x) for x in (50, 75, 90, 95)]
+            print("  %-7s %-8s %8d %8.1f%% %7d %7d %7d %7d"
+                  % (reg, rotulo, nt, 100.0 * ns / nt, p[0], p[1], p[2], p[3]))
+            return p
+
+        linha("samples", hist["sample"], n_tot["sample"], n_sem["sample"])
+        linha("controls", hist["control"], n_tot["control"], n_sem["control"])
+        p = linha("ALL", juntos, total, n_sem["sample"] + n_sem["control"])
+        print("")
+        if p is None:
+            sem_medida.append(reg)
+            continue
+        linhas.append((reg, total,
+                       100.0 * (n_sem["sample"] + n_sem["control"]) / total)
+                      + tuple(p))
+
+    if sem_medida:
+        print("  NOT MEASURED: %s" % " ".join(sem_medida))
+        print("  No pair gave a usable length: either nothing overlapped, or")
+        print("  the primer was not found in the reads (check that this")
+        print("  region's row in the primers table matches these files).")
+        print("  They are absent from the output file — no truncLen is")
+        print("  invented for a region that was not measured.")
+        print("")
+
     if primers:
         print("  Lengths are NET: the phasing block and the primer were located")
         print("  and subtracted read by read. Compare them with truncLenF +")
@@ -357,8 +413,13 @@ def main():
     ap.add_argument("--out", default=None,
                     help="batch mode: write the percentiles here as TSV")
     ap.add_argument("--samples", type=int, default=0,
-                    help="batch mode: use at most N samples per region "
+                    help="batch mode: use at most N samples per region, "
+                         "evenly spaced across the sorted list "
                          "(default 0 = all)")
+    ap.add_argument("--controls", default="^[Ss]mart",
+                    help="regex for control sample names (default ^[Ss]mart). "
+                         "Controls are reported separately: a known community "
+                         "and a real sample can fail for opposite reasons")
     ap.add_argument("--reads", type=int, default=20000,
                     help="pairs per file (default 20000)")
     ap.add_argument("--min-overlap", type=int, default=12,
