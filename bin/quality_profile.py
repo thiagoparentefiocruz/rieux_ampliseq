@@ -64,6 +64,32 @@ INSERTO = {
 }
 
 
+def insertos_do_tsv(caminho, coluna):
+    """region -> inserto, do inserts.tsv do check_overlap.py."""
+    out = {}
+    with open(caminho) as fh:
+        cab = None
+        for linha in fh:
+            if linha.startswith("#") or not linha.strip():
+                continue
+            c = linha.rstrip("\n").split("\t")
+            if cab is None:
+                cab = [x.strip().lower() for x in c]
+                if coluna.lower() not in cab:
+                    sys.exit("ERROR: %s has no column '%s' (has: %s)"
+                             % (caminho, coluna, ", ".join(cab)))
+                continue
+            d = dict(zip(cab, c))
+            reg = (d.get("region") or "").strip()
+            try:
+                v = int(d[coluna.lower()])
+            except (KeyError, ValueError):
+                continue
+            if reg and v > 0:
+                out[reg] = v
+    return out
+
+
 def insertos_medidos(caminho):
     """Mediana do comprimento de ASV por regiao, de um asv_length.tsv."""
     from collections import defaultdict
@@ -153,21 +179,47 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--asv", default=None,
                     help="asv_length.tsv from an earlier run; the observed median per "
-                         "region replaces the built-in table")
+                         "region replaces the built-in table. CIRCULAR — see --inserts")
+    ap.add_argument("--inserts", default=None,
+                    help="inserts.tsv from check_overlap.py --split: the insert "
+                         "measured in the READS, uncensored. Preferred over --asv")
+    ap.add_argument("--insert-column", default="p90",
+                    help="which percentile of the measured insert to aim at "
+                         "(default p90: the median leaves half the community "
+                         "above the ceiling)")
     ap.add_argument("--out", default=None,
                     help="write the chosen truncLen values as region_params.tsv")
     args = ap.parse_args()
 
     random.seed(args.seed)
 
-    if args.asv:
+    # --inserts tem precedencia sobre --asv de proposito.
+    #
+    # O --asv mede o inserto na mediana dos ASVs que SOBREVIVERAM, e isso e
+    # circular: truncLen curto corta a cauda longa, a mediana do que sobra
+    # desce, e a estimativa seguinte confirma o truncLen curto. Foi esse laco
+    # que deixou o V7V9 com teto de 415 bp para um amplicon de ~432 — os
+    # quatro controles fundiram ZERO read. O --inserts vem do
+    # check_overlap.py, que mede nas reads de entrada, antes de qualquer
+    # censura, e por isso enxerga a cauda que o --asv nunca ve.
+    if args.inserts:
+        medidos = insertos_do_tsv(args.inserts, args.insert_column)
+        origem = "%s (%s)" % (args.inserts, args.insert_column)
+    elif args.asv:
         medidos = insertos_medidos(args.asv)
-        for reg, v in medidos.items():
-            if INSERTO.get(reg) is not None or reg not in INSERTO:
-                INSERTO[reg] = v
+        origem = "%s (median of surviving ASVs — may be censored)" % args.asv
+    else:
+        medidos = {}
+        origem = None
+    for reg, v in medidos.items():
+        # ITS fica de fora: comprimento variavel, nao se trunca.
+        if reg.upper().startswith("ITS"):
+            continue
+        INSERTO[reg] = v
+    if origem:
         print("insert lengths taken from %s: %s\n"
-              % (args.asv, ", ".join("%s=%d" % (r, medidos[r])
-                                     for r in sorted(medidos))))
+              % (origem, ", ".join("%s=%d" % (r, medidos[r])
+                                   for r in sorted(medidos))))
     regioes = sorted(d for d in os.listdir(args.split)
                      if os.path.isdir(os.path.join(args.split, d)) and d != "unknown")
 

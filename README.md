@@ -94,13 +94,24 @@ organize -> discover -> split -> profile -> run -> sidle -> collect
 | `organize` | cross a sample sheet with the FASTQs on disk, one project per group |
 | `discover` | recover the panel's primers from the reads themselves |
 | `split` | route each read pair to its region, then write one samplesheet per region |
-| `profile` | measure per-cycle quality and pick truncLenF/R per region |
+| `profile` | measure the insert in the reads and the per-cycle quality, then pick truncLenF/R per region |
 | `run` | run ampliseq once per region |
 | `sidle` | run the multi-region reconstruction |
 | `collect` | write `final_reports/` |
 
 `profile` comes **after** `split`, not before: truncation is chosen per
 region, so it needs the reads already routed.
+
+It measures the insert **in the reads**, with `check_overlap.py`, and not in
+the ASVs of an earlier run. That distinction is not academic. DADA2 only
+merges a pair when `truncLenF + truncLenR - insert >= 12`, so a short
+truncLen deletes the long tail of the community — and the median of what
+survives is then shorter than the truth, which confirms the short truncLen
+next time. That loop left V7V9 with a 415 bp ceiling for a ~432 bp amplicon:
+all four controls merged **zero** reads and the region scored 6.6%. With the
+ceiling measured instead of inherited, the same region merges 99.9%. The
+target is the **p90** of the measured insert, not the median, because aiming
+at the median leaves half the community above the ceiling.
 
 From scratch, one command:
 
@@ -267,7 +278,7 @@ fat partition — with SILVA they are the only genuinely memory-hungry step.
 | `evaluate_run.py` | per-run QC report |
 | `quality_profile.py` | quality profiles, for choosing truncation |
 | `diagnose_merge.py` | where a region lost its reads, and whether truncLen is the cap |
-| `check_overlap.py` | do the raw pairs overlap at all, and what are the ones that don't |
+| `check_overlap.py` | measures the insert in the READS (uncensored); also diagnoses non-overlapping pairs |
 
 ### One gotcha worth stating out loud
 

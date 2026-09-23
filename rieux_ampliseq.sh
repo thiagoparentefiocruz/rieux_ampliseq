@@ -475,8 +475,27 @@ if rodar_estagio profile; then
         echo "  $PARAMS already exists — nothing to do."
     else
         precisa "$SPLIT/split" "the reads routed per region" split
+        precisa "$PRIMERS" "the primers table" discover
+
+        # Medir o inserto nas READS antes de escolher truncLen.
+        #
+        # Estimar o inserto pela mediana dos ASVs de uma rodada anterior e
+        # circular: truncLen curto corta a cauda longa, a mediana do que sobra
+        # desce, e a estimativa seguinte confirma o truncLen curto. O V7V9
+        # ficou com teto de 415 bp para um amplicon de ~432 e os quatro
+        # controles fundiram ZERO read — a regiao marcou 6,6%, e com o teto
+        # certo foi a 99,9%. O check_overlap mede na entrada, sem censura.
+        INSERTOS="$RAIZ/inserts.tsv"
+        exec_cmd python3 "$AQUI/bin/check_overlap.py" \
+                 --split "$SPLIT/split" --primers "$PRIMERS" \
+                 --out "$INSERTOS" --samples 6 || exit 1
+        echo
+        ARGS_PERFIL=()
+        if [[ -s "$INSERTOS" ]] || (( SIMULAR )); then
+            ARGS_PERFIL+=(--inserts "$INSERTOS")
+        fi
         exec_cmd python3 "$AQUI/bin/quality_profile.py" "$SPLIT/split" \
-                 --out "$PARAMS" || exit 1
+                 "${ARGS_PERFIL[@]}" --out "$PARAMS" || exit 1
     fi
     echo
 fi
