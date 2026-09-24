@@ -37,6 +37,7 @@ import sys
 from collections import defaultdict
 
 INT, FLOAT, TXT, SIMNAO = "int", "float", "text", "yes/no"
+TXT_NA = "text or NA"   # ausencia legitima, escrita como NA
 
 ESPERADO = {
     "reads_per_region.tsv": [
@@ -59,7 +60,7 @@ ESPERADO = {
     "prevalence.tsv": [
         ("project", TXT), ("region", TXT), ("rank", TXT), ("taxon", TXT),
         ("n_present", INT), ("n_total", INT), ("pct_prevalence", FLOAT),
-        ("pct_median", FLOAT), ("pct_max", FLOAT), ("sample_max", TXT),
+        ("pct_median", FLOAT), ("pct_max", FLOAT), ("sample_max", TXT_NA),
         ("n_controls_present", INT)],
 }
 
@@ -156,6 +157,12 @@ def confere_arquivo(caminho, colunas, err):
                 if nome in PERCENTUAIS and not (-0.01 <= reg[nome] <= 100.01):
                     err.add("linha %d, coluna '%s': %s fora de 0-100"
                             % (i, nome, v))
+            elif t == TXT_NA:
+                if not v:
+                    err.add("linha %d, coluna '%s': vazio. Ausencia se "
+                            "escreve NA — campo vazio e indistinguivel de "
+                            "separador perdido" % (i, nome))
+                reg[nome] = v
             elif t == SIMNAO:
                 if v not in ("yes", "no"):
                     err.add("linha %d, coluna '%s': '%s' nao e yes/no"
@@ -228,9 +235,22 @@ def main():
                             ("prevalence.tsv", "sample_max")):
         for d in tudo.get(arquivo, []):
             s = d.get(coluna)
+            if s == "NA":
+                continue
             if s and s not in amostras.get(d["region"], set()):
                 cruz.add("%s: '%s' (regiao %s) nao existe em "
                          "reads_per_region.tsv" % (arquivo, s, d["region"]))
+
+    # NA em sample_max tem de significar exatamente "nao ocorre em amostra
+    # nenhuma". Se aparecer com n_present > 0, o NA esta escondendo um erro.
+    for d in tudo.get("prevalence.tsv", []):
+        na = d.get("sample_max") == "NA"
+        zero = d.get("n_present") == 0
+        if na != zero:
+            cruz.add("prevalence.tsv: taxon '%s' (%s) tem n_present=%s e "
+                     "sample_max=%s — um contradiz o outro"
+                     % (d.get("taxon"), d.get("region"),
+                        d.get("n_present"), d.get("sample_max")))
 
     vistos = set()
     for d in tudo.get("prevalence.tsv", []):

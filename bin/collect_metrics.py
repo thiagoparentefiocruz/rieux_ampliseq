@@ -261,7 +261,14 @@ def taxonomia(dir_regiao, nome, regiao, s_cls, s_abd, s_amo, s_prev,
             continue
 
         # --- por amostra e prevalencia
-        pcts, pct_max, amostra_max = [], 0.0, ""
+        #
+        # amostra_max nasce "NA", e nao string vazia. Taxon que so ocorre em
+        # CONTROLE e caso legitimo — e justamente o que denuncia contaminante
+        # — mas ali nao existe amostra de maior fracao. Campo vazio num TSV e
+        # ambiguo: o R nao distingue "sem valor" de "erro de escrita", e um
+        # separador perdido produz exatamente a mesma aparencia. "NA" diz o
+        # que e, e o read.delim ja o le como ausente.
+        pcts, pct_max, amostra_max = [], 0.0, "NA"
         for i in idx_am:
             if vals[i] <= 0:
                 continue
