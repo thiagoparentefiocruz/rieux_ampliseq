@@ -1,6 +1,6 @@
 # Ampliseq @ Rieux — multi-region CLI wrapper
 
-<!-- depois do primeiro release, o Zenodo devolve o badge do DOI: cole-o aqui -->
+[![DOI](https://zenodo.org/badge/1385420291.svg)](https://doi.org/10.5281/zenodo.22940337)
 
 
 A bash wrapper that runs [nf-core/ampliseq](https://nf-co.re/ampliseq) across
