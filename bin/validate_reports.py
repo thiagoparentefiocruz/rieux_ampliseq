@@ -269,18 +269,34 @@ def main():
 
         com_asv = regioes.get("asv_table.tsv", set())
         rodaram = regioes.get("reads_per_region.tsv", set())
+        RANKS_T = ("Kingdom", "Phylum", "Class", "Order",
+                   "Family", "Genus", "Species")
         for r in sorted(rodaram - base_tax):
-            if r in com_asv:
-                n = sum(1 for d in tudo.get("asv_taxonomy.tsv", [])
-                        if d.get("region") == r)
-                cruz.add("regiao %s tem %d ASV no asv_table mas nao aparece em "
-                         "nenhuma tabela taxonomica — a taxonomia nao foi "
-                         "encontrada ou nao foi lida, e a regiao sumiu da "
-                         "analise sem erro" % (r, n))
-            else:
+            if r not in com_asv:
                 notas.append("regiao %s rodou e nao produziu ASV nenhuma "
                              "(ausente das tabelas taxonomicas, como esperado)"
                              % r)
+                continue
+            linhas_r = [d for d in tudo.get("asv_taxonomy.tsv", [])
+                        if d.get("region") == r]
+            com_tax = sum(1 for d in linhas_r
+                          if any(d.get(k, "NA") != "NA" for k in RANKS_T))
+            if com_tax:
+                # A taxonomia EXISTE e mesmo assim a regiao nao entrou nas
+                # tabelas agregadas: isso e falha de agregacao, nao do dado.
+                cruz.add("regiao %s tem %d ASV COM taxonomia e nao aparece em "
+                         "nenhuma tabela taxonomica — a agregacao perdeu a "
+                         "regiao" % (r, com_tax))
+            else:
+                # Nenhuma ASV recebeu taxonomia. Acontece de verdade: no ITS,
+                # o ITSx descarta ASV sem as ancoras conservadas, e se nao
+                # sobrar nenhuma os passos seguintes nao rodam e o ampliseq
+                # nem escreve a tabela de taxonomia.
+                notas.append("regiao %s tem %d ASV e NENHUMA recebeu "
+                             "taxonomia — fica fora das tabelas taxonomicas. "
+                             "No ITS isso e esperado quando so ha controles: "
+                             "o construto sintetico nao passa pelo ITSx"
+                             % (r, len(linhas_r)))
 
     amostras = defaultdict(set)     # region -> samples
     nao_controle = defaultdict(set)

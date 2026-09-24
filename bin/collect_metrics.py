@@ -503,7 +503,7 @@ def main():
             comprimento(d, nome, regiao, s_len)
             tabela_asv(d, nome, regiao, s_asv, s_tax,
                        com_seq=not args.no_sequences)
-            marca = "" if n2 else "   (no taxonomy — incomplete run)"
+            marca = "" if n2 else "   (no taxonomy — left out of the taxonomic tables)"
             print("  %-12s %-12s %3d samples  %5d ASVs%s"
                   % (nome, regiao, n1, n2, marca))
 
