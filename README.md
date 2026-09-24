@@ -285,6 +285,7 @@ fat partition — with SILVA they are the only genuinely memory-hungry step.
 | `quality_profile.py` | quality profiles, for choosing truncation |
 | `diagnose_merge.py` | where a region lost its reads, and whether truncLen is the cap |
 | `check_overlap.py` | measures the insert in the READS (uncensored); also diagnoses non-overlapping pairs |
+| `validate_reports.py` | checks `final_reports/` against the contract with `aspp` (headers, field counts, types, decimal separator, cross-file consistency) |
 
 ### One gotcha worth stating out loud
 

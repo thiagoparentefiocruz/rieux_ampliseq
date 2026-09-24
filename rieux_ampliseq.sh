@@ -682,4 +682,17 @@ if rodar_estagio collect; then
              --out "$RAIZ/final_reports" \
              --primers "$PRIMERS" --controls "$CONTROLES" || exit 1
 
+    # Conferir o contrato no momento em que ele e produzido. Erro de formato
+    # em TSV nao se anuncia: um separador perdido desloca uma coluna inteira e
+    # o R le numero como texto, ou le o numero errado sem reclamar. Avisa e
+    # nao aborta — os arquivos existem e precisam ser olhados.
+    if (( ! SIMULAR )); then
+        echo
+        python3 "$AQUI/bin/validate_reports.py" "$RAIZ/final_reports" || {
+            echo
+            echo "  WARNING: final_reports/ did not pass the format check above." >&2
+            echo "           Fix it before feeding aspp." >&2
+        }
+    fi
+
 fi
