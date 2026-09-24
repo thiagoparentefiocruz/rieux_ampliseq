@@ -221,8 +221,10 @@ def main():
                 "pairs also amplify eukaryotic 18S, which is far longer than "
                 "the 16S product and therefore never merges at any truncLen. "
                 "Raising truncLen will not recover it — confirm what the "
-                "unmerged pairs are (vsearch --fastq_mergepairs reports WHY "
-                "each pair failed) before treating this as a loss."
+                "unmerged pairs are before treating this as a loss: "
+                "check_overlap.py on that region's split FASTQs reports how "
+                "many pairs cannot overlap at all and writes the most "
+                "frequent ones as FASTA, ready for BLAST."
                 % (t_ctl, t_amo)))
             continue
 
