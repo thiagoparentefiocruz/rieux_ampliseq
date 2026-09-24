@@ -1,5 +1,8 @@
 # Ampliseq @ Rieux — multi-region CLI wrapper
 
+<!-- depois do primeiro release, o Zenodo devolve o badge do DOI: cole-o aqui -->
+
+
 A bash wrapper that runs [nf-core/ampliseq](https://nf-co.re/ampliseq) across
 every region of a **multi-region 16S/ITS amplicon panel** on the Rieux HPC
 cluster, optionally runs the multi-region reconstruction with
@@ -304,6 +307,13 @@ formatted — and nothing warns you if you pass it raw. `prepare_unite.py` exist
 because of this: it reproduces ampliseq's own `taxref_reformat_unite.sh` and
 emits the **two** files (`assignTaxonomy` and `addSpecies`) that the official
 path uses.
+
+## Citation
+
+If this wrapper contributed to work you publish, cite the archived release —
+`CITATION.cff` carries the metadata and Zenodo mints a DOI per release. Cite
+also [nf-core/ampliseq](https://nf-co.re/ampliseq), which does the actual
+analysis, and the reference database you used.
 
 ## License
 

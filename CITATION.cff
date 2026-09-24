@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+title: >-
+  rieux_ampliseq: a multi-region CLI wrapper for nf-core/ampliseq
+message: If you use this software, please cite it as below.
+type: software
+authors:
+  - given-names: Thiago
+    family-names: Parente
+    affiliation: Instituto Oswaldo Cruz, Fundação Oswaldo Cruz (Fiocruz)
+repository-code: https://github.com/thiagoparentefiocruz/rieux_ampliseq
+abstract: >-
+  A staged bash wrapper that runs nf-core/ampliseq across every region of a
+  multi-region 16S/ITS amplicon panel on an HPC cluster, measures the amplicon
+  insert in the reads themselves to choose DADA2 truncation lengths, optionally
+  runs the q2-sidle multi-region reconstruction, and consolidates the output
+  into a single validated set of tables. Built for the QIAseq 16S/ITS Pro
+  Screening Panel (96) — six 16S regions plus ITS1 — and driven by a primer
+  table, so another panel supplies its own.
+keywords:
+  - metagenomics
+  - amplicon sequencing
+  - 16S rRNA
+  - ITS
+  - microbiome
+  - DADA2
+  - nextflow
+  - multi-region
+license: MIT
+version: 0.1.0
+date-released: '2026-09-24'
