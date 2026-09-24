@@ -238,18 +238,49 @@ def main():
     print("\n  Cross-file checks")
     print("  " + "-" * 60)
     cruz = Erros(args.max_errors)
+    notas = []
 
+    # Coerencia de regioes, com a distincao que importa.
+    #
+    # As quatro tabelas taxonomicas tem de concordar ENTRE SI. Ja o
+    # reads_per_region lista toda regiao que rodou, inclusive as que nao
+    # produziram ASV nenhuma — e regiao sem ASV ausente das tabelas
+    # taxonomicas nao e inconsistencia, e o unico resultado possivel.
+    #
+    # O que E problema: regiao que TEM ASV no asv_table e mesmo assim nao
+    # aparece nas taxonomicas. Isso significa que a taxonomia nao foi
+    # encontrada ou nao foi lida, e a regiao sai da analise em silencio.
+    TAXONOMICAS = ("abundance.tsv", "abundance_per_sample.tsv",
+                   "prevalence.tsv", "classification.tsv")
     regioes = {}
     for arquivo, dados in tudo.items():
-        if dados:
-            regioes[arquivo] = set(d.get("region") for d in dados)
-    if regioes:
-        base = set.union(*regioes.values())
-        for arquivo, r in sorted(regioes.items()):
-            faltando = base - r
-            if faltando and arquivo not in ("asv_length.tsv",) + OPCIONAIS:
-                cruz.add("%s nao tem as regioes %s, que aparecem em outros"
-                         % (arquivo, " ".join(sorted(faltando))))
+        regioes[arquivo] = set(d.get("region") for d in dados) if dados else set()
+
+    tax_regs = [regioes.get(a, set()) for a in TAXONOMICAS if a in tudo]
+    if tax_regs:
+        base_tax = set.union(*tax_regs)
+        for arquivo in TAXONOMICAS:
+            if arquivo not in tudo:
+                continue
+            faltando = base_tax - regioes[arquivo]
+            if faltando:
+                cruz.add("%s nao tem as regioes %s, que aparecem nas outras "
+                         "tabelas taxonomicas" % (arquivo, " ".join(sorted(faltando))))
+
+        com_asv = regioes.get("asv_table.tsv", set())
+        rodaram = regioes.get("reads_per_region.tsv", set())
+        for r in sorted(rodaram - base_tax):
+            if r in com_asv:
+                n = sum(1 for d in tudo.get("asv_taxonomy.tsv", [])
+                        if d.get("region") == r)
+                cruz.add("regiao %s tem %d ASV no asv_table mas nao aparece em "
+                         "nenhuma tabela taxonomica — a taxonomia nao foi "
+                         "encontrada ou nao foi lida, e a regiao sumiu da "
+                         "analise sem erro" % (r, n))
+            else:
+                notas.append("regiao %s rodou e nao produziu ASV nenhuma "
+                             "(ausente das tabelas taxonomicas, como esperado)"
+                             % r)
 
     amostras = defaultdict(set)     # region -> samples
     nao_controle = defaultdict(set)
@@ -308,6 +339,8 @@ def main():
         print("  regions, sample names and n_total are consistent   ok")
     else:
         cruz.imprime("      ")
+    for n in notas:
+        print("      note: %s" % n)
 
     print("")
     if total_erros == 0:

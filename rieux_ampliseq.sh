@@ -557,7 +557,17 @@ if rodar_estagio run; then
         SS="$SS_DIR/samplesheet_${REG}.tsv"
         [[ -s "$SS" ]] || { echo "  [$REG] no samplesheet — skipping"; PULADO+=("$REG"); continue; }
         N=$(( $(wc -l < "$SS") - 1 ))
-        (( N >= MIN_AMOSTRAS )) || { echo "  [$REG] only $N sample(s) — skipping"; PULADO+=("$REG:$N"); continue; }
+        # O minimo conta AMOSTRA, nao linha. Uma regiao que so tem os controles
+        # passa no teste de contagem e produz uma analise que nao descreve
+        # amostra nenhuma: foi o que aconteceu com o ITS1 da maria e do herbert,
+        # onde fezes nao tem fungo e sobraram os quatro Smart Controls.
+        N_AMOSTRAS=$(awk -F'\t' -v rx="$CONTROLES" \
+            'NR>1 && $1 !~ rx {n++} END{print n+0}' "$SS")
+        if (( N_AMOSTRAS < MIN_AMOSTRAS )); then
+            echo "  [$REG] only $N_AMOSTRAS non-control sample(s) of $N — skipping"
+            PULADO+=("$REG:$N_AMOSTRAS")
+            continue
+        fi
 
         read -r FW RV < <(awk -F'\t' -v r="$REG" '$1==r {print $2" "$3}' "$PRIMERS")
         [[ -n "${FW:-}" && -n "${RV:-}" ]] || { echo "  [$REG] primers missing — skipping"; PULADO+=("$REG:primers"); continue; }
