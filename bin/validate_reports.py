@@ -38,6 +38,11 @@ from collections import defaultdict
 
 INT, FLOAT, TXT, SIMNAO = "int", "float", "text", "yes/no"
 TXT_NA = "text or NA"   # ausencia legitima, escrita como NA
+INT_NA = "int or NA"
+
+# Arquivos do nivel fino. Sao opcionais porque um final_reports/ gerado por
+# uma versao anterior nao os tem — e isso nao o torna invalido.
+OPCIONAIS = ("asv_table.tsv", "asv_taxonomy.tsv")
 
 ESPERADO = {
     "reads_per_region.tsv": [
@@ -57,6 +62,13 @@ ESPERADO = {
         ("project", TXT), ("region", TXT), ("rank", TXT), ("taxon", TXT),
         ("sample", TXT), ("control", SIMNAO), ("reads", INT),
         ("pct_sample", FLOAT)],
+    "asv_table.tsv": [
+        ("project", TXT), ("region", TXT), ("asv_id", TXT), ("sample", TXT),
+        ("control", SIMNAO), ("reads", INT)],
+    "asv_taxonomy.tsv": [
+        ("project", TXT), ("region", TXT), ("asv_id", TXT), ("length", INT_NA),
+        ("Kingdom", TXT), ("Phylum", TXT), ("Class", TXT), ("Order", TXT),
+        ("Family", TXT), ("Genus", TXT), ("Species", TXT)],
     "prevalence.tsv": [
         ("project", TXT), ("region", TXT), ("rank", TXT), ("taxon", TXT),
         ("n_present", INT), ("n_total", INT), ("pct_prevalence", FLOAT),
@@ -89,6 +101,11 @@ class Erros(object):
 
 def confere_arquivo(caminho, colunas, err):
     """Devolve (linhas, dados) — dados como lista de dicts."""
+    with open(caminho) as _fh:
+        _cab = _fh.readline().rstrip("\n").rstrip("\r").split("\t")
+    if _cab and _cab[-1] == "sequence" and "sequence" not in [c[0] for c in colunas]:
+        # asv_taxonomy.tsv sem --no-sequences: coluna extra, legitima
+        colunas = list(colunas) + [("sequence", TXT)]
     nomes = [c[0] for c in colunas]
     tipos = dict(colunas)
     dados = []
@@ -157,6 +174,12 @@ def confere_arquivo(caminho, colunas, err):
                 if nome in PERCENTUAIS and not (-0.01 <= reg[nome] <= 100.01):
                     err.add("linha %d, coluna '%s': %s fora de 0-100"
                             % (i, nome, v))
+            elif t == INT_NA:
+                if v != "NA" and not v.lstrip("-").isdigit():
+                    err.add("linha %d, coluna '%s': '%s' nao e inteiro nem NA"
+                            % (i, nome, v))
+                    continue
+                reg[nome] = None if v == "NA" else int(v)
             elif t == TXT_NA:
                 if not v:
                     err.add("linha %d, coluna '%s': vazio. Ausencia se "
@@ -197,8 +220,12 @@ def main():
         caminho = os.path.join(args.reports, arquivo)
         err = Erros(args.max_errors)
         if not os.path.isfile(caminho):
-            print("  %-26s %9s %9s  MISSING" % (arquivo, "-", "-"))
-            total_erros += 1
+            if arquivo in OPCIONAIS:
+                print("  %-26s %9s %9s  absent (optional)"
+                      % (arquivo, "-", "-"))
+            else:
+                print("  %-26s %9s %9s  MISSING" % (arquivo, "-", "-"))
+                total_erros += 1
             continue
         n, dados = confere_arquivo(caminho, ESPERADO[arquivo], err)
         tudo[arquivo] = dados
@@ -220,7 +247,7 @@ def main():
         base = set.union(*regioes.values())
         for arquivo, r in sorted(regioes.items()):
             faltando = base - r
-            if faltando and arquivo != "asv_length.tsv":
+            if faltando and arquivo not in ("asv_length.tsv",) + OPCIONAIS:
                 cruz.add("%s nao tem as regioes %s, que aparecem em outros"
                          % (arquivo, " ".join(sorted(faltando))))
 
@@ -251,6 +278,18 @@ def main():
                      "sample_max=%s — um contradiz o outro"
                      % (d.get("taxon"), d.get("region"),
                         d.get("n_present"), d.get("sample_max")))
+
+    conhecidos = set((d["region"], d["asv_id"])
+                     for d in tudo.get("asv_taxonomy.tsv", []))
+    if conhecidos:
+        for d in tudo.get("asv_table.tsv", []):
+            if (d["region"], d["asv_id"]) not in conhecidos:
+                cruz.add("asv_table.tsv: ASV '%s' (%s) nao aparece em "
+                         "asv_taxonomy.tsv" % (d["asv_id"], d["region"]))
+    for d in tudo.get("asv_table.tsv", []):
+        if d["sample"] not in amostras.get(d["region"], set()):
+            cruz.add("asv_table.tsv: '%s' (regiao %s) nao existe em "
+                     "reads_per_region.tsv" % (d["sample"], d["region"]))
 
     vistos = set()
     for d in tudo.get("prevalence.tsv", []):

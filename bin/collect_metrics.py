@@ -148,6 +148,90 @@ def comprimento(dir_regiao, nome, regiao, saida):
     return len(hist)
 
 
+def sequencias_asv(dir_regiao):
+    """id -> sequencia, de dada2/ASV_seqs.fasta. {} se nao existir."""
+    f = os.path.join(dir_regiao, "dada2", "ASV_seqs.fasta")
+    if not os.path.isfile(f):
+        return {}
+    seqs, atual, pedacos = {}, None, []
+    with open(f) as fh:
+        for linha in fh:
+            linha = linha.rstrip("\n")
+            if linha.startswith(">"):
+                if atual:
+                    seqs[atual] = "".join(pedacos)
+                atual = linha[1:].split()[0]
+                pedacos = []
+            else:
+                pedacos.append(linha.strip())
+    if atual:
+        seqs[atual] = "".join(pedacos)
+    return seqs
+
+
+def tabela_asv(dir_regiao, nome, regiao, s_asv, s_tax, com_seq=True):
+    """
+    Escreve a contagem por ASV x amostra e a taxonomia por ASV.
+
+    Vem das MESMAS fontes que as tabelas agregadas (dada2/ASV_table.tsv mais
+    a tabela de taxonomia), para que os numeros fechem entre os arquivos. Um
+    asv_table que discordasse do abundance seria pior que nenhum.
+
+    Formato longo e SEM zeros: a matriz e esparsa — no sedimento sao ~15 mil
+    ASVs por regiao, e a forma larga seria quase toda zero. O R monta a matriz
+    com tidyr::pivot_wider quando precisar dela.
+    """
+    d = os.path.join(dir_regiao, "dada2")
+    f_tab = os.path.join(d, "ASV_table.tsv")
+    f_tax = achar_tax(d)
+    if not os.path.isfile(f_tab):
+        return 0
+
+    cab, linhas = ler_tsv(f_tab)
+    amostras = cab[1:]
+    for l in linhas:
+        asv = l[0]
+        for i, v in enumerate(l[1:]):
+            if i >= len(amostras):
+                break
+            try:
+                n = int(float(v))
+            except ValueError:
+                continue
+            if n <= 0:
+                continue
+            s_asv.append([nome, regiao, asv, amostras[i],
+                          "yes" if eh_controle(amostras[i]) else "no", str(n)])
+
+    seqs = sequencias_asv(dir_regiao) if com_seq else {}
+    tax = {}
+    if f_tax:
+        cab_t, linhas_t = ler_tsv(f_tax)
+        pos = {}
+        for i, campo in enumerate(cab_t):
+            pos[ALIAS.get(campo, campo)] = i
+        for l in linhas_t:
+            vals = []
+            for r in RANKS:
+                i = pos.get(r)
+                v = l[i].strip() if (i is not None and i < len(l)) else ""
+                if not v or v.upper() == "NA" or "unidentified" in v.lower():
+                    v = "NA"
+                vals.append(v)
+            tax[l[0]] = vals
+
+    vazio = ["NA"] * len(RANKS)
+    for l in linhas:
+        asv = l[0]
+        seq = seqs.get(asv, "")
+        linha = [nome, regiao, asv, str(len(seq)) if seq else "NA"]
+        linha += tax.get(asv, vazio)
+        if com_seq:
+            linha.append(seq or "NA")
+        s_tax.append(linha)
+    return len(linhas)
+
+
 def taxonomia(dir_regiao, nome, regiao, s_cls, s_abd, s_amo, s_prev,
               min_reads, rx_foco, focos):
     """
@@ -364,6 +448,11 @@ def main():
     ap.add_argument("--with-variants", action="store_true",
                     help="include diagnostic runs (V1V2_t160_ruim and the like)")
     ap.add_argument("--min-reads", type=int, default=1)
+    ap.add_argument("--no-sequences", action="store_true",
+                    help="leave the ASV sequence out of asv_taxonomy.tsv. "
+                         "It is the biggest column by far, but without it the "
+                         "table cannot be used to build a tree or to check an "
+                         "ASV without going back to the run directory")
     ap.add_argument("--focus", default=None,
                     help="regex; print the per-sample detail of matching taxa")
     args = ap.parse_args()
@@ -393,6 +482,7 @@ def main():
     painel = nomes_do_painel(args.primers)
 
     s_ret, s_cls, s_abd, s_len, s_amo, s_prev = [], [], [], [], [], []
+    s_asv, s_tax = [], []
     focos = []
 
     n_regioes = 0
@@ -411,6 +501,8 @@ def main():
             n2 = taxonomia(d, nome, regiao, s_cls, s_abd, s_amo, s_prev,
                            args.min_reads, rx, focos)
             comprimento(d, nome, regiao, s_len)
+            tabela_asv(d, nome, regiao, s_asv, s_tax,
+                       com_seq=not args.no_sequences)
             marca = "" if n2 else "   (no taxonomy — incomplete run)"
             print("  %-12s %-12s %3d samples  %5d ASVs%s"
                   % (nome, regiao, n1, n2, marca))
@@ -455,6 +547,15 @@ def main():
     gravar("abundance_per_sample.tsv",
            ["project", "region", "rank", "taxon", "sample", "control", "reads",
             "pct_sample"], s_amo)
+    # asv_table/asv_taxonomy sao o nivel FINO do contrato: as outras tabelas
+    # ja vem agregadas por taxon, e agregado nao serve para UniFrac, decontam
+    # por ASV nem rarefacao. Formato longo e sem zeros.
+    gravar("asv_table.tsv",
+           ["project", "region", "asv_id", "sample", "control", "reads"], s_asv)
+    cab_tax = ["project", "region", "asv_id", "length"] + RANKS
+    if not args.no_sequences:
+        cab_tax.append("sequence")
+    gravar("asv_taxonomy.tsv", cab_tax, s_tax)
     gravar("prevalence.tsv",
            ["project", "region", "rank", "taxon", "n_present", "n_total",
             "pct_prevalence", "pct_median", "pct_max", "sample_max",

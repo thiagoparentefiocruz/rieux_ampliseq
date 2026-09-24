@@ -247,10 +247,19 @@ its denominator — without it you cannot know what the reconstruction dropped.
 | `classification.tsv` | region × rank — how far classification got |
 | `abundance.tsv` | taxon × region, aggregated, controls separated |
 | `asv_length.tsv` | ASV length histogram per region |
+| `asv_table.tsv` | ASV × sample counts, long and without zeros |
+| `asv_taxonomy.tsv` | one row per ASV: length, the seven ranks, and the sequence |
 | `abundance_per_sample.tsv` | taxon × sample |
 | `prevalence.tsv` | taxon × region — in how many samples it occurs |
 
-The last two answer a question the aggregated tables cannot: a taxon at 42% may
+`asv_table.tsv` and `asv_taxonomy.tsv` are the fine-grained level. Everything
+else is already aggregated by taxon, and aggregated counts cannot give you
+UniFrac, per-ASV `decontam`, or rarefaction done properly. They come from the
+same source as the aggregated tables, so the numbers reconcile; drop the
+sequence column with `--no-sequences` if the size bothers you (it is the bulk
+of it: about 35 MB for a 77k-ASV project against 8 MB for the counts).
+
+The last two of the aggregated tables answer a question the others cannot: a taxon at 42% may
 be in every sample or piled into one, and those call for opposite decisions.
 
 Relative abundance is computed **within region** — comparing raw counts across
