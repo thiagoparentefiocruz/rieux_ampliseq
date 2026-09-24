@@ -7,6 +7,8 @@ authors:
   - given-names: Thiago
     family-names: Parente
     affiliation: Instituto Oswaldo Cruz, Fundação Oswaldo Cruz (Fiocruz)
+    orcid: 'https://orcid.org/0000-0001-7501-726X'
+    email: thiago.parente@fiocruz.br
 repository-code: https://github.com/thiagoparentefiocruz/rieux_ampliseq
 abstract: >-
   A staged bash wrapper that runs nf-core/ampliseq across every region of a
